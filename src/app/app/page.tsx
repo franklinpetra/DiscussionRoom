@@ -60,7 +60,7 @@ export default async function WorkspacesPage({
           <h1>Workspaces</h1>
           <p className="muted">A private home for projects and discussions.</p>
           <p className="workspace-start">
-            <Link className="button" href="/room">Start a guest session</Link>
+            <Link className="button" href="/">Start a guest session</Link>
           </p>
         </div>
       </section>

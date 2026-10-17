@@ -39,7 +39,13 @@ export default async function WorkspacePage({
   if (workspaceError) throw new Error("Unable to load workspace.");
   if (!workspace) notFound();
 
-  const [projectsResult, conversationsResult] = await Promise.all([
+  const [membershipResult, projectsResult, conversationsResult] = await Promise.all([
+    supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", auth.user.id)
+      .maybeSingle(),
     supabase
       .from("projects")
       .select("id, name, description, created_at")
@@ -47,14 +53,19 @@ export default async function WorkspacePage({
       .order("created_at", { ascending: false }),
     supabase
       .from("conversations")
-      .select("id, title, project_id, created_at")
+      .select("id, title, project_id, created_at, created_by")
       .eq("workspace_id", workspaceId)
       .is("project_id", null)
       .order("created_at", { ascending: false }),
   ]);
+  if (membershipResult.error || !membershipResult.data) {
+    throw new Error("Unable to load workspace membership.");
+  }
   if (projectsResult.error) throw new Error("Unable to load projects.");
   if (conversationsResult.error) throw new Error("Unable to load conversations.");
 
+  const canManageWorkspace =
+    membershipResult.data.role === "owner" || membershipResult.data.role === "admin";
   const query = await searchParams;
   const successMessage =
     query.created === "project"
@@ -132,11 +143,13 @@ export default async function WorkspacePage({
               <li key={conversation.id}>
                 <div className="toolbar">
                   <span>{conversation.title}</span>
-                  <form action={deleteConversation}>
-                    <input name="workspaceId" type="hidden" value={workspaceId} />
-                    <input name="conversationId" type="hidden" value={conversation.id} />
-                    <button className="delete-button" type="submit">Delete</button>
-                  </form>
+                  {(canManageWorkspace || conversation.created_by === auth.user.id) && (
+                    <form action={deleteConversation}>
+                      <input name="workspaceId" type="hidden" value={workspaceId} />
+                      <input name="conversationId" type="hidden" value={conversation.id} />
+                      <button className="delete-button" type="submit">Delete</button>
+                    </form>
+                  )}
                 </div>
               </li>
             ))}

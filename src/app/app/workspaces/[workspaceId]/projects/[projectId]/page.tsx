@@ -36,23 +36,38 @@ export default async function ProjectPage({
   if (projectError) throw new Error("Unable to load project.");
   if (!project) notFound();
 
-  const [{ data: workspace, error: workspaceError }, conversationsResult] = await Promise.all([
+  const [
+    { data: workspace, error: workspaceError },
+    membershipResult,
+    conversationsResult,
+  ] = await Promise.all([
     supabase
       .from("workspaces")
       .select("id, name")
       .eq("id", workspaceId)
       .maybeSingle(),
     supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", auth.user.id)
+      .maybeSingle(),
+    supabase
       .from("conversations")
-      .select("id, title, created_at")
+      .select("id, title, created_at, created_by")
       .eq("workspace_id", workspaceId)
       .eq("project_id", projectId)
       .order("created_at", { ascending: false }),
   ]);
   if (workspaceError) throw new Error("Unable to load workspace.");
   if (!workspace) notFound();
+  if (membershipResult.error || !membershipResult.data) {
+    throw new Error("Unable to load workspace membership.");
+  }
   if (conversationsResult.error) throw new Error("Unable to load conversations.");
 
+  const canManageWorkspace =
+    membershipResult.data.role === "owner" || membershipResult.data.role === "admin";
   const query = await searchParams;
   const message =
     query.error === "save-failed"
@@ -98,11 +113,14 @@ export default async function ProjectPage({
               <li key={conversation.id}>
                 <div className="toolbar">
                   <span>{conversation.title}</span>
-                  <form action={deleteConversation}>
-                    <input name="workspaceId" type="hidden" value={workspaceId} />
-                    <input name="conversationId" type="hidden" value={conversation.id} />
-                    <button className="delete-button" type="submit">Delete</button>
-                  </form>
+                  {(canManageWorkspace || conversation.created_by === auth.user.id) && (
+                    <form action={deleteConversation}>
+                      <input name="workspaceId" type="hidden" value={workspaceId} />
+                      <input name="projectId" type="hidden" value={projectId} />
+                      <input name="conversationId" type="hidden" value={conversation.id} />
+                      <button className="delete-button" type="submit">Delete</button>
+                    </form>
+                  )}
                 </div>
               </li>
             ))}

@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
       `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
+      "media-src 'self' blob:",
       "font-src 'self'",
       "connect-src 'self' https://openrouter.ai https://*.supabase.co wss://*.supabase.co http://127.0.0.1:54321 http://localhost:54321 ws://127.0.0.1:54321 ws://localhost:54321",
       "form-action 'self'",

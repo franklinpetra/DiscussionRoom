@@ -1,14 +1,6 @@
-import Link from "next/link";
-import GuestRoom from "@/app/room/guest-room";
+import { redirect } from "next/navigation";
 
+// The room now lives on the home page.
 export default function RoomPage() {
-  return (
-    <main className="shell page-shell">
-      <header className="masthead">
-        <Link className="wordmark" href="/">The Room</Link>
-        <Link className="quiet-link" href="/login">Sign in</Link>
-      </header>
-      <GuestRoom />
-    </main>
-  );
+  redirect("/");
 }

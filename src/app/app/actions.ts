@@ -84,19 +84,28 @@ export async function createConversation(formData: FormData) {
 
 export async function deleteConversation(formData: FormData) {
   const parsed = z
-    .object({ workspaceId: z.uuid(), conversationId: z.uuid() })
+    .object({
+      workspaceId: z.uuid(),
+      projectId: z.uuid().optional(),
+      conversationId: z.uuid(),
+    })
     .safeParse({
       workspaceId: formData.get("workspaceId"),
+      projectId: formData.get("projectId") || undefined,
       conversationId: formData.get("conversationId"),
     });
   if (!parsed.success) fail("/app", "invalid-input");
 
+  const destination = parsed.data.projectId
+    ? `/app/workspaces/${parsed.data.workspaceId}/projects/${parsed.data.projectId}`
+    : `/app/workspaces/${parsed.data.workspaceId}`;
   const { supabase } = await authenticatedClient("/app");
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("conversations")
     .delete()
     .eq("id", parsed.data.conversationId)
-    .eq("workspace_id", parsed.data.workspaceId);
-  if (error) fail(`/app/workspaces/${parsed.data.workspaceId}`, "delete-failed");
-  redirect(`/app/workspaces/${parsed.data.workspaceId}?deleted=conversation`);
+    .eq("workspace_id", parsed.data.workspaceId)
+    .select("id");
+  if (error || !data.length) fail(destination, "delete-failed");
+  redirect(`${destination}?deleted=conversation`);
 }

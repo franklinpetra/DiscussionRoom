@@ -1,0 +1,10 @@
+# Never upload local secrets, private reference material, or build leftovers.
+.env*
+!.env.example
+_reference/
+.next/
+node_modules/
+supabase/.temp/
+supabase/.branches/
+*.tsbuildinfo
+.DS_Store

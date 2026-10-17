@@ -127,10 +127,10 @@ export default async function ProviderConnectionsPage({
           <p className="eyebrow">Provider connections</p>
           <h1>{selectedWorkspace ? `${selectedWorkspace.name} keys` : "Personal keys"}</h1>
           <p className="muted">
-            Provider account owners pay for model usage. At run time, a personal key
-            is preferred; a workspace key is used only if your personal key for
-            that provider is not connected. Remembered keys are encrypted before
-            storage and used by the server for provider requests.
+            Remembered keys are encrypted before storage, but are not yet connected
+            to model runs. Guest discussions require an OpenRouter key entered on
+            the room page; it stays in that browser tab and is sent directly to
+            OpenRouter.
           </p>
         </div>
       </section>
@@ -172,9 +172,6 @@ export default async function ProviderConnectionsPage({
           {providerIds.map((provider) => {
             const providerConnections = connections.filter(
               (connection) => connection.provider === provider,
-            );
-            const selectedConnection = providerConnections.find(
-              (connection) => connection.credential_scope === selectedScope,
             );
 
             return (
@@ -257,11 +254,6 @@ export default async function ProviderConnectionsPage({
                       Save {selectedScope} key
                     </button>
                   </form>
-                )}
-                {selectedConnection && (
-                  <p className="muted">
-                    This {selectedScope} key will be preferred for this provider.
-                  </p>
                 )}
               </article>
             );

@@ -1537,18 +1537,26 @@ a {
   z-index: -1;
 }
 
-.seat-chair {
-  height: var(--chair-height);
-  width: auto;
-  user-select: none;
-  animation: chair-turn 450ms ease;
+.seat-chair-stack {
+  display: grid;
+  transform: translateX(var(--lean, 0));
+  /* Listeners react a beat after the speaker begins. */
+  transition: transform 700ms ease 250ms;
 }
 
-@keyframes chair-turn {
-  from {
-    opacity: 0.4;
-    transform: scaleX(0.9);
-  }
+.seat-chair {
+  grid-area: 1 / 1;
+  align-self: end;
+  justify-self: center;
+  height: var(--chair-height);
+  width: auto;
+  opacity: 0;
+  user-select: none;
+  transition: opacity 550ms ease 250ms;
+}
+
+.seat-chair[data-visible="true"] {
+  opacity: 1;
 }
 
 .seat-glow {
@@ -1571,7 +1579,7 @@ a {
   opacity: 0.55;
 }
 
-.scene-seat[data-state="thinking"] .seat-chair {
+.scene-seat[data-state="thinking"] .seat-chair[data-visible="true"] {
   animation: seat-think 1.6s ease-in-out infinite;
 }
 
@@ -1753,7 +1761,12 @@ a {
   .seat-chair,
   .scene-phrase,
   .scene-board li,
-  .scene-seat[data-state="thinking"] .seat-chair,
+  .seat-chair,
+  .seat-chair-stack {
+    transition: none;
+  }
+
+  .scene-seat[data-state="thinking"] .seat-chair[data-visible="true"],
   .scene-seat[data-state="answering"] .seat-glow,
   .stage-message {
     animation: none;

@@ -55,7 +55,7 @@ export default function PrintReport({ run }: { run: GuestRun }) {
           ))}
         </div>
       </section>
-      <footer className="print-footer">{reportId(run.createdAt)} · theroom.click</footer>
+      <footer className="print-footer">{reportId(run.createdAt)} · thediscussion.app</footer>
     </article>
   );
 }

@@ -244,6 +244,8 @@ export default function RoomScene({
           const angle = facingAngle(position, attentionPoint(position, speaker, isSpeaker));
           const depth = (position.z + 1) / 2;
           const status = liveStatus.get(seat.id);
+          // Listeners lean a little toward whoever is speaking.
+          const lean = speaker && !isSpeaker ? Math.sign(speaker.x - position.x) * 5 : 0;
           return (
             <div
               className="scene-seat"
@@ -262,14 +264,20 @@ export default function RoomScene({
               }}
             >
               <span className="seat-glow" aria-hidden="true" />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                alt=""
-                className="seat-chair"
-                draggable={false}
-                key={angle}
-                src={`/chairs/chair-${seat.chair ?? "a"}-${angle}.webp`}
-              />
+              {/* All eight views are stacked; the one facing the right way fades in, so chairs turn smoothly. */}
+              <span className="seat-chair-stack" style={{ ["--lean" as string]: `${lean}px` }}>
+                {ANGLES.map((view) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    alt=""
+                    className="seat-chair"
+                    data-visible={view === angle}
+                    draggable={false}
+                    key={view}
+                    src={`/chairs/chair-${seat.chair ?? "a"}-${view}.webp`}
+                  />
+                ))}
+              </span>
               <span className="seat-name">{seat.label}</span>
             </div>
           );

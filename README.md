@@ -1,6 +1,6 @@
 # TheRoom
 
-This repository contains TheRoom, the separate hosted application being built to bring a multi-model discussion experience to `theroom.click`. It is not the existing Room of Models site at RoomOfModels.site.
+This repository contains TheRoom, the separate hosted application being built to bring a multi-model discussion experience to `thediscussion.app` (formerly `theroom.click`, which now redirects there). It is not the existing Room of Models site at RoomOfModels.site.
 
 The `/room` guest experience sends requests directly from the browser to OpenRouter using a key held only in page memory; OpenRouter forwards prompts and discussion turns to the selected model providers, and bills the account for the supplied key. Guest transcripts are not saved to an account and can be downloaded.
 

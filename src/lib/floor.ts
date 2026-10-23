@@ -82,7 +82,10 @@ const PODCAST_STYLE =
   "something genuinely surprises or delights you, let it show, the way people do when an " +
   "idea clicks. Excitement lives in how you build, not in adjectives: raise the stakes a " +
   "notch, name the puzzle before the answer (\"here's the strange part\"), and now and then " +
-  "turn to the person who asked and bring them into it. It should sound like people thinking out loud together, never like an " +
+  "turn to the person who asked and bring them into it. Be easy with each other: lightness " +
+  "and humor are welcome, and a quick \"Ha,\" when something is genuinely funny. You may " +
+  "slide in by finishing the last speaker's sentence in your own words; if you do, begin " +
+  "your turn with \"…\". It should sound like people thinking out loud together, never like an " +
   "essay, a list or a speech.";
 
 /**

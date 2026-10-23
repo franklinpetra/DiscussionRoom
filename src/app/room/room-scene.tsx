@@ -29,6 +29,9 @@ const handSrc = (name: string) => `/hands/set/${name}.webp`;
 
 /** A breath between speakers, the way a real table pauses before the next voice. */
 const PAUSE_BETWEEN_SPEAKERS_MS = 1000;
+/** A speaker finishing someone else's sentence slides straight in. */
+const SLIDE_IN_MS = 150;
+const slidesIn = (text?: string) => /^\s*(…|\.\.\.|—)/.test(text ?? "");
 const RATES = [0.8, 1, 1.25, 1.5, 2];
 
 type RoomSceneProps = {
@@ -109,16 +112,20 @@ export default function RoomScene({
   const done = finished && index >= items.length;
   const active = playing && phase === "speaking" && !pausing;
 
-  /** Moves to the next speaker after a one-second pause. */
+  /** Moves to the next speaker after a one-second pause, or at once when they slide in. */
+  const nextText = items[index + 1]?.text;
   const nextSpeaker = useCallback(() => {
     clearTimeout(pauseTimer.current);
     setPausing(true);
-    pauseTimer.current = setTimeout(() => {
-      setPausing(false);
-      setIndex((value) => value + 1);
-      setSentence(0);
-    }, PAUSE_BETWEEN_SPEAKERS_MS);
-  }, []);
+    pauseTimer.current = setTimeout(
+      () => {
+        setPausing(false);
+        setIndex((value) => value + 1);
+        setSentence(0);
+      },
+      slidesIn(nextText) ? SLIDE_IN_MS : PAUSE_BETWEEN_SPEAKERS_MS,
+    );
+  }, [nextText]);
 
   useEffect(() => () => clearTimeout(pauseTimer.current), []);
 

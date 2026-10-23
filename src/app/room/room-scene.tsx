@@ -406,7 +406,7 @@ export default function RoomScene({
                     style={{ ["--seat-color" as string]: card.model.color ?? "#777" }}
                   >
                     <header>
-                      <strong>{card.model.label}</strong>
+                      <strong title={card.model.label}>{card.model.nickname ?? card.model.label}</strong>
                       <span>
                         {card.status === "thinking"
                           ? "Thinking…"

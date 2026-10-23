@@ -80,10 +80,13 @@ export function buildFloorThread(context: FloorContext, model: GuestModel): Comp
   const messages = buildIndependentPrompt(context.question, context.attachments);
   messages.push({ role: "assistant", content: own.text });
   const others = context.blind.length - 1;
+  const names = context.blind.filter((turn) => turn.model.id !== model.id).map((turn) => speakerName(turn));
   let content =
     `You were not alone. ${others} other participant${others === 1 ? "" : "s"} answered the same ` +
     "question independently, without knowing about you. Their answers:\n\n" +
-    blindBlock(context.blind, model);
+    blindBlock(context.blind, model) +
+    `\n\nAt this table you go by ${model.nickname ?? model.label}, and the others by ${names.join(", ")}. ` +
+    "Use those short names, as people at a table would.";
   if (context.conversation.length) {
     content += `\n\nThe conversation so far:\n\n${conversationBlock(context.conversation, model)}`;
   }

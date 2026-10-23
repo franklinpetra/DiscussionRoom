@@ -16,7 +16,40 @@ export type GuestModel = {
   vendor: string;
   color?: string;
   chair?: Chair;
+  /** What the room calls this seat: "Claude", or "Luna" when two GPTs sit together. */
+  nickname?: string;
 };
+
+const hasDigit = (word: string) => /\d/.test(word);
+
+/** "GPT-6" → "GPT", "GLM-5.3" → "GLM", "Claude" → "Claude". */
+function family(label: string) {
+  const first = label.split(/\s+/)[0] ?? label;
+  return first.replace(/[-\s]*v?\d[\w.]*$/i, "") || first;
+}
+
+/** The last word without a version number: "GPT-6 Luna" → "Luna", "Claude Haiku 5.5" → "Haiku". */
+function distinctive(label: string) {
+  return label.split(/\s+/).filter((word) => !hasDigit(word)).at(-1) ?? label;
+}
+
+/**
+ * Short names for the room, the way people at a table would use them: the family name when
+ * it's unique, otherwise the word that tells two of a family apart, otherwise the full label.
+ */
+export function assignNicknames<T extends GuestModel>(models: T[]): T[] {
+  const steps = [family, distinctive, (label: string) => label.split(/\s+/)[0] ?? label, (label: string) => label];
+  const names = models.map((model) => family(model.label));
+  for (const step of steps.slice(1)) {
+    const counts = new Map<string, number>();
+    names.forEach((name) => counts.set(name, (counts.get(name) ?? 0) + 1));
+    if ([...counts.values()].every((count) => count === 1)) break;
+    models.forEach((model, i) => {
+      if ((counts.get(names[i]) ?? 0) > 1) names[i] = step(model.label);
+    });
+  }
+  return models.map((model, i) => ({ ...model, nickname: names[i] }));
+}
 
 export const FALLBACK_MODEL: GuestModel = {
   id: "z-ai/glm-5.3-flash",
@@ -146,7 +179,8 @@ export function modelLabel(turn: GuestTurn) {
 
 /** How a turn's speaker is named to the models: the asker is "the person who asked", not "You". */
 export function speakerName(turn: GuestTurn) {
-  return turn.model.id === PERSON.id ? "The person who asked" : modelLabel(turn);
+  if (turn.model.id === PERSON.id) return "The person who asked";
+  return turn.model.nickname ?? modelLabel(turn);
 }
 
 export function buildQuestionContent(question: string, attachments: Attachment[]) {

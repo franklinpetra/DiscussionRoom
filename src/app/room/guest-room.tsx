@@ -29,6 +29,7 @@ import {
   type FloorContext,
 } from "@/lib/floor";
 import {
+  assignNicknames,
   buildIndependentPrompt,
   buildSynthesisPrompt,
   DEFAULT_MODELS,
@@ -51,6 +52,7 @@ import {
   type Hand,
   type LiveTurn,
 } from "@/lib/guest-room";
+import { keyUsage } from "@/lib/openrouter-check";
 import { buildMarkdown } from "@/lib/report";
 import { SPEECH_PRICE_PER_CHARACTER } from "@/lib/speech-audio";
 import { buildPlaylist, splitSentences } from "@/lib/room-scene";
@@ -109,12 +111,16 @@ export default function GuestRoom() {
   const [personQueued, setPersonQueued] = useState(false);
   const pendingPersonRef = useRef<string | null>(null);
   const [voiceCharacters, setVoiceCharacters] = useState(0);
+  // What the key had spent when this discussion began, to read the exact charge afterwards.
+  const usageAtStart = useRef<Promise<number | null> | null>(null);
+  const [exactCharge, setExactCharge] = useState<string>("");
   const countSpeech = useCallback((characters: number) => setVoiceCharacters((total) => total + characters), []);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const keyControlRef = useRef<KeyControlHandle>(null);
 
   const seated = useMemo(() => models.filter((model) => model.selected), [models]);
+  const seatedNames = useMemo(() => assignNicknames(seated), [seated]);
   const playlist = useMemo(() => (run ? buildPlaylist(run) : []), [run]);
   const attachedChars = attachments.reduce((total, item) => total + item.text.length, 0);
 
@@ -247,8 +253,11 @@ export default function GuestRoom() {
       return;
     }
 
-    setRunSeats(seated);
+    const seats = assignNicknames(seated);
+    setRunSeats(seats);
     setVoiceCharacters(0);
+    setExactCharge("");
+    usageAtStart.current = keyUsage(apiKey);
     setPhase("writing");
     const activeController = new AbortController();
     const startedAt = performance.now();
@@ -450,7 +459,7 @@ export default function GuestRoom() {
     try {
       const independent = await runStage(
         "Independent",
-        seated.map((model) => ({ model, messages: buildIndependentPrompt(cleanQuestion, attachments) })),
+        seats.map((model) => ({ model, messages: buildIndependentPrompt(cleanQuestion, attachments) })),
         activeController,
       );
       currentRun.errors.push(...independent.errors);
@@ -529,6 +538,19 @@ export default function GuestRoom() {
       setConversing(false);
       setController(null);
     }
+  }
+
+  async function checkExactCharge() {
+    setExactCharge("Asking OpenRouter…");
+    const [before, now] = await Promise.all([usageAtStart.current, keyUsage(apiKey)]);
+    if (before == null || now == null) {
+      setExactCharge("OpenRouter didn't say. Your activity page at openrouter.ai has the full record.");
+      return;
+    }
+    setExactCharge(
+      `Charged to your key since this discussion began: $${Math.max(0, now - before).toFixed(4)}. ` +
+        "OpenRouter can take a minute to record the last requests, and anything else using this key counts too.",
+    );
   }
 
   function joinIn() {
@@ -614,7 +636,7 @@ export default function GuestRoom() {
         live={liveStage?.turns ?? (liveSynthesis ? [liveSynthesis] : [])}
         phase={phase}
         question={run?.question}
-        seats={run ? runSeats : seated}
+        seats={run ? runSeats : seatedNames}
         stageRef={stageRef}
       >
         <div className="guest-composer">
@@ -800,6 +822,12 @@ export default function GuestRoom() {
                   : ""}
                 {elapsed !== null ? ` · written in ${elapsed}s` : ""}. Some providers don&apos;t report cost,
                 so your OpenRouter activity page has the exact total.
+              </p>
+              <p className="guest-usage">
+                <button className="quiet-link" onClick={checkExactCharge} type="button">
+                  Check the exact charge on my key
+                </button>
+                {exactCharge && <> · {exactCharge}</>}
               </p>
               <div className="guest-actions">
                 <button className="button" onClick={() => window.print()} type="button">

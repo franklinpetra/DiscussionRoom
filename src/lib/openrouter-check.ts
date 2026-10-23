@@ -115,3 +115,18 @@ export async function testSpeech(apiKey: string): Promise<CheckResult> {
     return { name: "Natural voices", ok: false, detail: message, advice: adviceFor(0, message) };
   }
 }
+
+/** The key's total spend so far, in dollars, as OpenRouter records it; null if unavailable. */
+export async function keyUsage(apiKey: string): Promise<number | null> {
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/key", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const usage = ((await response.json()) as { data?: KeyInfo }).data?.usage;
+    return typeof usage === "number" ? usage : null;
+  } catch {
+    return null;
+  }
+}

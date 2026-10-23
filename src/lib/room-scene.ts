@@ -59,7 +59,7 @@ function item(turn: GuestTurn, stage: PlayStage, key: string): PlayItem {
   return {
     key,
     seat: turn.model,
-    speaker: modelLabel(turn),
+    speaker: turn.model.nickname ?? modelLabel(turn),
     stage,
     text: turn.text,
     phrase: turn.keyPhrase || fallbackPhrase(turn.text),

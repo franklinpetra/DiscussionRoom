@@ -20,6 +20,8 @@ type VoiceMode = "natural" | "browser" | "captions";
 export type ScenePhase = "idle" | "writing" | "interlude" | "speaking";
 
 const ANGLES = [0, 45, 90, 135, 180, 225, 270, 315];
+/** A breath between speakers, the way a real table pauses before the next voice. */
+const PAUSE_BETWEEN_SPEAKERS_MS = 1000;
 const RATES = [0.8, 1, 1.25, 1.5, 2];
 
 type RoomSceneProps = {
@@ -66,6 +68,8 @@ export default function RoomScene({
   const [naturalError, setNaturalError] = useState("");
   const [notice, setNotice] = useState("");
   const [rate, setRate] = useState(1);
+  const [pausing, setPausing] = useState(false);
+  const pauseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const rateRef = useRef(rate);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCache = useRef(new Map<string, Promise<string>>());
@@ -87,7 +91,20 @@ export default function RoomScene({
   const caption = sentences[sentence] ?? "";
   const speakerSeat = current ? seatIndex.get(current.seat.id) ?? -1 : -1;
   const done = finished && index >= items.length;
-  const active = playing && phase === "speaking";
+  const active = playing && phase === "speaking" && !pausing;
+
+  /** Moves to the next speaker after a one-second pause. */
+  const nextSpeaker = useCallback(() => {
+    clearTimeout(pauseTimer.current);
+    setPausing(true);
+    pauseTimer.current = setTimeout(() => {
+      setPausing(false);
+      setIndex((value) => value + 1);
+      setSentence(0);
+    }, PAUSE_BETWEEN_SPEAKERS_MS);
+  }, []);
+
+  useEffect(() => () => clearTimeout(pauseTimer.current), []);
 
   useEffect(() => {
     const engine = synth();
@@ -151,18 +168,14 @@ export default function RoomScene({
           if (at >= spokenCountRef.current) {
             audio.pause();
             audio.ontimeupdate = null;
-            if (!cancelled) {
-              setIndex((value) => value + 1);
-              setSentence(0);
-            }
+            if (!cancelled) nextSpeaker();
             return;
           }
           setSentence(at);
         };
         audio.onended = () => {
           if (cancelled) return;
-          setIndex((value) => value + 1);
-          setSentence(0);
+          nextSpeaker();
         };
         audio.play().then(
           () => setNotice(""),
@@ -185,7 +198,7 @@ export default function RoomScene({
       audioRef.current?.pause();
       audioRef.current = null;
     };
-  }, [active, currentKey, currentText, speakerSeat, effectiveMode, sentences, getAudio]);
+  }, [active, currentKey, currentText, speakerSeat, effectiveMode, sentences, getAudio, nextSpeaker]);
 
   useEffect(() => {
     const cache = audioCache.current;
@@ -200,10 +213,7 @@ export default function RoomScene({
     const advance = () => {
       if (cancelled) return;
       if (sentence + 1 < spokenCount) setSentence(sentence + 1);
-      else {
-        setIndex(index + 1);
-        setSentence(0);
-      }
+      else nextSpeaker();
     };
     const engine = synth();
     const readingTime = readingMilliseconds(caption, rate);
@@ -240,11 +250,13 @@ export default function RoomScene({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [active, currentKey, sentence, spokenCount, caption, effectiveMode, rate, seatVoices, speakerSeat, index, voices.length]);
+  }, [active, currentKey, sentence, spokenCount, caption, effectiveMode, rate, seatVoices, speakerSeat, voices.length, nextSpeaker]);
 
   useEffect(() => () => synth()?.cancel(), []);
 
   function jump(to: number) {
+    clearTimeout(pauseTimer.current);
+    setPausing(false);
     setIndex(Math.max(0, Math.min(to, items.length)));
     setSentence(0);
   }
@@ -322,7 +334,7 @@ export default function RoomScene({
                   />
                 ))}
               </span>
-              <span className="seat-name">{seat.label}</span>
+              <span className="seat-name" title={seat.label}>{seat.nickname ?? seat.label}</span>
               {handOf.has(seat.id) && (
                 <span className="seat-hand" data-kind={handOf.get(seat.id)!.kind} title={handOf.get(seat.id)!.reason}>
                   <span aria-hidden="true">{handOf.get(seat.id)!.kind === "break" ? "!" : "✋"}</span>

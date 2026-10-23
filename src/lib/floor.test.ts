@@ -185,3 +185,27 @@ describe("the record", () => {
     expect(prompt).toContain("PASS");
   });
 });
+
+describe("nicknames", () => {
+  it("uses family names, and the telling word when two of a family sit together", async () => {
+    const { assignNicknames, DEFAULT_MODELS } = await import("@/lib/guest-room");
+    expect(assignNicknames([...DEFAULT_MODELS]).map((model) => model.nickname)).toEqual([
+      "Claude",
+      "Luna",
+      "Mini",
+      "Gemini",
+      "DeepSeek",
+    ]);
+    const twoClaudes = assignNicknames([
+      { id: "a", label: "Claude Haiku 5.5", vendor: "Anthropic" },
+      { id: "b", label: "Claude Sonnet 5.5", vendor: "Anthropic" },
+    ]);
+    expect(twoClaudes.map((model) => model.nickname)).toEqual(["Haiku", "Sonnet"]);
+  });
+
+  it("tells each seat its own name and the others' at the table", () => {
+    const named = { ...alice, nickname: "Ali" };
+    const thread = buildFloorThread({ ...context(), blind: [turn(named, "A."), ...blind.slice(1)] }, named)!;
+    expect(lastContent(thread)).toContain("At this table you go by Ali, and the others by Bob, Carol");
+  });
+});

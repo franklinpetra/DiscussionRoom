@@ -269,8 +269,10 @@ export default function RoomScene({
   const speaking = phase === "speaking";
   const shownSpeaker = speaking ? speakerSeat : -1;
   // Hands go up while the speaker is still talking: listeners decided after hearing this turn.
-  const raisedHands =
-    speaking && current && (sentence >= 1 || spokenCount <= 1) ? (hands?.[current.key] ?? []) : [];
+  // At most two show at once, the way a real table looks: an interruption first, then the
+  // earliest hands.
+  const heard = speaking && current && (sentence >= 1 || spokenCount <= 1) ? (hands?.[current.key] ?? []) : [];
+  const raisedHands = [...heard.filter((hand) => hand.kind === "break"), ...heard.filter((hand) => hand.kind === "hand")].slice(0, 2);
   const handOf = new Map(raisedHands.map((hand) => [hand.model.id, hand]));
   const stageLabel = (item: NonNullable<typeof current>) =>
     item.kind === "interjection"

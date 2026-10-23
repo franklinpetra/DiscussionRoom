@@ -3,11 +3,12 @@ export const SPEECH_API = "https://openrouter.ai/api/v1/audio/speech";
 export const SPEECH_MODEL = "microsoft/mai-voice-2.1-flash";
 export const SPEECH_PRICE_PER_CHARACTER = 0.000015;
 
-const VOICES = ["Ethan", "Harper", "Jasper", "Olivia", "Grant", "Iris", "Sage"];
+// The first voice is a gentle British one; the rest are American, each distinct.
+const VOICES = ["en-GB-Harry", "en-US-Harper", "en-US-Jasper", "en-US-Olivia", "en-US-Grant", "en-US-Iris", "en-US-Sage"];
 
 /** A distinct natural voice for each seat. */
 export function seatVoice(index: number) {
-  return `en-US-${VOICES[index % VOICES.length]}`;
+  return VOICES[index % VOICES.length];
 }
 
 export async function requestSpeech(apiKey: string, text: string, voice: string, signal?: AbortSignal) {

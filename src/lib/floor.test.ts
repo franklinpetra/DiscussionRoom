@@ -122,8 +122,10 @@ describe("taking the floor", () => {
   it("asks for a short turn that adds what no one said, carrying the hand's intent", () => {
     const prompt = lastContent(buildFloorTurnPrompt(context([turn(bob, "b")]), alice, "the grid can't carry it"));
     expect(prompt).toContain("You raised your hand to add: the grid can't carry it");
-    expect(prompt).toMatch(/one to three short sentences/);
-    expect(prompt).toMatch(/do not need to address the last speaker/);
+    expect(prompt).toMatch(/Say what hasn't been said, in one or two short sentences/);
+    expect(prompt).toMatch(/podcast hosts/);
+    expect(prompt).toMatch(/reply with exactly PASS/);
+    expect(prompt).toMatch(/don't need to address the last speaker/);
     expect(prompt).toContain(VOLUNTEER_MARKER);
   });
 });

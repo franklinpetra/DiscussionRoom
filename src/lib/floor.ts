@@ -68,7 +68,15 @@ const CONVERSATION_SPIRIT =
   "answer the last speaker point by point; something they hear sparks a thought, and they add " +
   "what no one has said yet: a new point, an unexpected connection, a consequence, an example, " +
   "the place an idea leads, or the question everyone is avoiding. Nobody knows where it will " +
-  "go, and that is the point. Agreeing, praising, summarizing or restating is not a contribution.";
+  "go, and that is the point. Agreeing, praising, summarizing or restating is not a contribution. " +
+  "Most of the time, the right move is to stay quiet and listen; speak only when you hold " +
+  "something that hasn't been said.";
+
+const PODCAST_STYLE =
+  "Talk the way the best podcast hosts do: warm, curious and conversational. Short spoken " +
+  "sentences, contractions, plain words, the occasional quick reaction or real question to " +
+  "someone by name. It should sound like people thinking out loud together, never like an " +
+  "essay, a list or a speech.";
 
 /**
  * A seat's view of the room: its own blind answer, the unveiling, and everything said aloud.
@@ -136,12 +144,12 @@ export function buildFloorTurnPrompt(
   thread.push({
     role: "user",
     content:
-      `${VOICE}\n\n${CONVERSATION_SPIRIT}\n\n` +
+      `${VOICE}\n\n${CONVERSATION_SPIRIT}\n\n${PODCAST_STYLE}\n\n` +
       (intent ? `You have the floor. You raised your hand to add: ${intent}\n\n` : "You have the floor.\n\n") +
-      "Speak as you would at a table of sharp friends: one to three short sentences. Add the " +
-      "thing no one has said. You may pick up anyone's thread, by name, when it leads somewhere " +
-      "new, but you do not need to address the last speaker, and never just agree or recap. " +
-      "If your thought has already been said, say something else or say only that you'll pass.\n\n" +
+      "Say what hasn't been said, in one or two short sentences; succinct is always better. You " +
+      "may pick up anyone's thread, by name, when it leads somewhere new, but you don't need to " +
+      "address the last speaker, and never just agree or recap. If someone has already said your " +
+      "thought and you have nothing new, reply with exactly PASS.\n\n" +
       `${KEY_PHRASE_INSTRUCTION}\n\n` +
       "If you would particularly like to write the room's final synthesis, end with a separate " +
       `line reading exactly ${VOLUNTEER_MARKER}`,
@@ -163,6 +171,7 @@ export function buildInterjectionPrompt(
     content:
       `You broke in on ${speakerName(interrupted)}, who had just said: "${spokenText(interrupted)}" ` +
       `You cut in because: ${reason}\n\n` +
+      `${PODCAST_STYLE}\n\n` +
       "Say your interjection: one short sentence, spoken directly to them by name. No preamble.",
   });
   return thread;
@@ -184,7 +193,8 @@ export function buildReplyPrompt(
     content:
       `${speakerName(interjection)} broke in on you mid-thought.` +
       (unsaid ? ` You hadn't yet said: "${unsaid}"` : "") +
-      "\n\nAnswer them in one or two short sentences, by name: concede, push back, or finish " +
+      `\n\n${PODCAST_STYLE}\n\n` +
+      "Answer them in one or two short sentences, by name: concede, push back, or finish " +
       "your point if it still matters. Never just agree.\n\n" +
       KEY_PHRASE_INSTRUCTION,
   });

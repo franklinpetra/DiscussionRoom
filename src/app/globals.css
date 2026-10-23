@@ -2820,3 +2820,117 @@ a {
     animation: none;
   }
 }
+
+/* ---- The artist lab (experiment) ---- */
+.lab-controls {
+  display: grid;
+  gap: 10px;
+  max-width: 760px;
+  padding: 34px 0 24px;
+}
+
+.lab-controls h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 34px;
+  font-weight: 600;
+}
+
+.lab-controls p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.lab-controls label[for] {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lab-controls textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  font: inherit;
+}
+
+.lab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.lab-row .pill-button[aria-pressed="true"] {
+  border-color: var(--green);
+  color: var(--green-dark);
+  font-weight: 600;
+}
+
+.lab-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+}
+
+.lab-controls .button {
+  justify-self: start;
+}
+
+.lab-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 18px;
+}
+
+.lab-card {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+/* Shown over the room's rug, to judge each painting where it would live. */
+.lab-canvas {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  padding: 10px;
+  color: var(--muted);
+  background: radial-gradient(ellipse at center, rgb(214 206 190 / 55%), rgb(214 206 190 / 15%) 70%, transparent 72%),
+    var(--paper);
+  font-size: 13px;
+  text-align: center;
+}
+
+.lab-canvas img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+  mix-blend-mode: multiply;
+}
+
+.lab-card figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+}
+
+.lab-card figcaption small {
+  color: var(--muted);
+}
+
+.lab-card figcaption span {
+  margin-left: auto;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.lab-card[data-status="painting"] .lab-canvas span {
+  animation: seat-think 1.6s ease-in-out infinite;
+}

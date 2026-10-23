@@ -28,7 +28,9 @@ export function buildMarkdown(run: GuestRun) {
     lines.push(`Attached: ${run.attachments.map((item) => item.name).join(", ")}`, "");
   }
   if (run.synthesis) {
-    lines.push("## The synthesis", "", run.synthesis.text, "", `— ${modelLabel(run.synthesis)}`, "");
+    lines.push("## The synthesis", "", run.synthesis.text, "");
+    if (run.synthesis.sources?.length) lines.push(`Sources: ${run.synthesis.sources.join(" · ")}`, "");
+    lines.push(`— ${modelLabel(run.synthesis)}`, "");
   }
   if (run.contributions.length) {
     lines.push("## Parting thoughts from inside the room", "");
@@ -38,7 +40,10 @@ export function buildMarkdown(run: GuestRun) {
   lines.push("## The complete conversation", "");
   for (const round of run.rounds) {
     lines.push(`### ${round.name}`, "");
-    for (const turn of round.turns) lines.push(`**${modelLabel(turn)}**`, "", turn.text, "");
+    for (const turn of round.turns) {
+      lines.push(`**${modelLabel(turn)}**`, "", turn.text, "");
+      if (turn.sources?.length) lines.push(`Sources: ${turn.sources.join(" · ")}`, "");
+    }
   }
   return lines.join("\n");
 }

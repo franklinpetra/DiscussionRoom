@@ -266,3 +266,13 @@ describe("direct questions and spoken sources", () => {
     expect(withoutWebAddresses("Costs fell 4.5% in 2024.")).toBe("Costs fell 4.5% in 2024.");
   });
 });
+
+describe("sources", () => {
+  it("keeps cited addresses for the written report while dropping them from speech", async () => {
+    const { parseTurnMarkers } = await import("@/lib/guest-room");
+    const parsed = parseTurnMarkers("A 2023 Nature study (https://www.nature.com/articles/x) found it, per who.int.");
+    expect(parsed.text).toBe("A 2023 Nature study found it, per.");
+    expect(parsed.sources).toEqual(["https://www.nature.com/articles/x", "who.int"]);
+    expect(parseTurnMarkers("No sources here.").sources).toBeUndefined();
+  });
+});

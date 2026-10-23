@@ -103,6 +103,8 @@ export type GuestTurn = {
   cutAt?: number;
   /** The name of the seat this turn put a direct question to; they answer next. */
   asks?: string;
+  /** Web addresses the speaker cited: kept for the written report, never read aloud. */
+  sources?: string[];
 };
 
 /** A listener's real decision after hearing a turn. */
@@ -219,6 +221,15 @@ export function buildIndependentPrompt(
  * Web addresses are for reading, not hearing: a source is named the way people talk
  * ("the 2023 Nature study…"), so any address a model writes out is dropped.
  */
+const WEB_ADDRESS =
+  /(https?:\/\/[^\s)\]>"']+|www\.[^\s)\]>"']+|\b[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|gov|edu|io|ai|app|co|uk|int)\b(?:\/[^\s)\]>"']*)?)/gi;
+
+/** The web addresses in a turn, cleaned of trailing punctuation and de-duplicated. */
+export function webAddresses(text: string): string[] {
+  const found = (text.match(WEB_ADDRESS) ?? []).map((address) => address.replace(/[.,;:!?]+$/, ""));
+  return [...new Set(found)];
+}
+
 export function withoutWebAddresses(text: string) {
   return text
     .replace(/\(?\s*(https?:\/\/|www\.)[^\s)]+\s*\)?/gi, " ")
@@ -251,7 +262,15 @@ export function parseTurnMarkers(text: string) {
     }
     kept.push(line);
   }
-  return { text: withoutWebAddresses(kept.join("\n").trim()), volunteered, keyPhrase, asks };
+  const raw = kept.join("\n").trim();
+  const sources = webAddresses(raw);
+  return {
+    text: withoutWebAddresses(raw),
+    volunteered,
+    keyPhrase,
+    asks,
+    ...(sources.length ? { sources } : {}),
+  };
 }
 
 /**

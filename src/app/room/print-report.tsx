@@ -34,6 +34,7 @@ export default function PrintReport({ run }: { run: GuestRun }) {
       {run.synthesis && (
         <section className="print-synthesis">
           <p>{run.synthesis.text}</p>
+          {!!run.synthesis.sources?.length && <p className="print-sources">Sources: {run.synthesis.sources.join(" · ")}</p>}
           <small>Synthesis by {modelLabel(run.synthesis)}</small>
         </section>
       )}
@@ -64,6 +65,7 @@ export default function PrintReport({ run }: { run: GuestRun }) {
                     {turn.kind === "interjection" ? " (breaks in)" : turn.kind === "person" ? " (joins in)" : ""}
                   </strong>
                   <p>{turn.text}</p>
+                  {!!turn.sources?.length && <p className="print-sources">Sources: {turn.sources.join(" · ")}</p>}
                 </div>
               ))}
             </div>

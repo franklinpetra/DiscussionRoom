@@ -87,6 +87,23 @@ function writeRotation(value: number) {
   }
 }
 
+/** A turn's cited web addresses, listed in the written record. */
+function Sources({ sources }: { sources: string[] }) {
+  return (
+    <p className="turn-sources">
+      Sources:{" "}
+      {sources.map((address, index) => (
+        <span key={address}>
+          {index > 0 && " · "}
+          <a href={/^https?:/i.test(address) ? address : `https://${address}`} rel="noreferrer" target="_blank">
+            {address.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "")}
+          </a>
+        </span>
+      ))}
+    </p>
+  );
+}
+
 function colorOf(model: GuestModel) {
   return model.color ?? "var(--ink-soft)";
 }
@@ -186,9 +203,9 @@ export default function GuestRoom() {
             (delta) => patch(model.id, (live) => ({ ...live, status: "answering", text: live.text + delta })),
             options,
           );
-          const { text, volunteered, keyPhrase } = parseTurnMarkers(turn.text);
+          const { text, volunteered, keyPhrase, sources } = parseTurnMarkers(turn.text);
           patch(model.id, (live) => ({ ...live, model: turn.servedModel ?? turn.model, status: "complete", text }));
-          return { ...turn, text, volunteered, keyPhrase } as GuestTurn;
+          return { ...turn, text, volunteered, keyPhrase, ...(sources ? { sources } : {}) } as GuestTurn;
         } catch (stageError) {
           const message = getErrorMessage(stageError);
           patch(model.id, (live) => ({
@@ -231,8 +248,8 @@ export default function GuestRoom() {
       );
       setLiveSynthesis(null);
       if (requestsAnotherRound(turn.text)) return turn;
-      const { text, keyPhrase } = parseTurnMarkers(turn.text);
-      return { ...turn, text, keyPhrase };
+      const { text, keyPhrase, sources } = parseTurnMarkers(turn.text);
+      return { ...turn, text, keyPhrase, ...(sources ? { sources } : {}) };
     } catch (synthesisError) {
       setLiveSynthesis(null);
       if (!activeController.signal.aborted) {
@@ -325,8 +342,17 @@ export default function GuestRoom() {
             ),
           options,
         );
-        const { text, volunteered, keyPhrase, asks } = parseTurnMarkers(turn.text);
-        return { ...turn, text, volunteered, keyPhrase, asks, kind, id: `c${Date.now().toString(36)}-${model.id}` };
+        const { text, volunteered, keyPhrase, asks, sources } = parseTurnMarkers(turn.text);
+        return {
+          ...turn,
+          text,
+          volunteered,
+          keyPhrase,
+          asks,
+          ...(sources ? { sources } : {}),
+          kind,
+          id: `c${Date.now().toString(36)}-${model.id}`,
+        };
       } catch (turnError) {
         if (!activeController.signal.aborted) {
           currentRun.errors.push(`${CONVERSATION} · ${model.label}: ${getErrorMessage(turnError)}`);
@@ -865,6 +891,7 @@ export default function GuestRoom() {
                     ) : (
                       <p>{turn.text}</p>
                     )}
+                    {!!turn.sources?.length && <Sources sources={turn.sources} />}
                   </article>
                 );
               })}
@@ -875,6 +902,7 @@ export default function GuestRoom() {
             <section className="guest-synthesis">
               <p className="eyebrow">What the room discovered</p>
               <p>{run.synthesis.text}</p>
+              {!!run.synthesis.sources?.length && <Sources sources={run.synthesis.sources} />}
               <small>Synthesis by {modelLabel(run.synthesis)}</small>
               {!!run.contributions.length && (
                 <div className="contributions">

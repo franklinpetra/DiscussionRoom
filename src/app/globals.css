@@ -2073,3 +2073,58 @@ a {
 .guest-turn[data-kind="person"] {
   background: var(--warm);
 }
+
+/* Captions drift across the rug, a few words visible at a time, in step with the voice. */
+.rug-caption {
+  --rug-width: min(440px, 70vw);
+  position: relative;
+  width: var(--rug-width);
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: clamp(17px, 2.2vw, 22px);
+  line-height: 1.4;
+  white-space: nowrap;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+}
+
+.rug-caption span {
+  display: inline-block;
+  /* Start the first words just right of centre, so they're seen as they're spoken. */
+  padding-left: calc(var(--rug-width) * 0.55);
+  animation: rug-scroll var(--scroll-ms) linear forwards;
+}
+
+@keyframes rug-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rug-caption {
+    white-space: normal;
+    -webkit-mask-image: none;
+    mask-image: none;
+    text-align: center;
+  }
+
+  .rug-caption span {
+    padding-left: 0;
+    animation: none;
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -410,6 +410,20 @@ export default function RoomScene({
               {current.phrase}
             </p>
           )}
+          {speaking && current && caption && (
+            // The words drift across the rug as they're spoken, a few at a time.
+            <p
+              aria-hidden="true"
+              className="rug-caption"
+              key={`${current.key}-${sentence}`}
+              style={{
+                ["--scroll-ms" as string]: `${Math.max(2200, readingMilliseconds(caption, rate))}ms`,
+                ["--seat-color" as string]: current.seat.color ?? "var(--ink)",
+              }}
+            >
+              <span>{caption}</span>
+            </p>
+          )}
           {speaking && !current && (
             <p className="scene-phrase scene-waiting">
               {done ? "That's the whole conversation." : "The room is gathering its thoughts…"}
@@ -427,7 +441,7 @@ export default function RoomScene({
                   {current.speaker}
                   <small> · {stageLabel(current)}</small>
                 </strong>
-                <p>{caption}</p>
+                <p className="visually-hidden">{caption}</p>
               </>
             ) : (
               <p className="muted">{done ? "Replay it, or read the written record below." : "Waiting for the next voice…"}</p>

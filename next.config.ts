@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Verity is a browser-only app served from public/verity (see scripts/sync-verity.mjs).
+  async rewrites() {
+    return [{ source: "/verity", destination: "/verity/index.html" }];
+  },
   async headers() {
     const isDevelopment = process.env.NODE_ENV === "development";
     const contentSecurityPolicy = [

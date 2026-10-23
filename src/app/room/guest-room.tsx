@@ -108,8 +108,8 @@ function colorOf(model: GuestModel) {
   return model.color ?? "var(--ink-soft)";
 }
 
-export default function GuestRoom() {
-  const [question, setQuestion] = useState("");
+export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: string }) {
+  const [question, setQuestion] = useState(initialQuestion.slice(0, MAX_QUESTION_LENGTH));
   const [apiKey, setApiKey] = useState("");
   const [models, setModels] = useState(initialModels);
   const [attachments, setAttachments] = useState<Attachment[]>([]);

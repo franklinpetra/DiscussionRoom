@@ -1,6 +1,13 @@
-import { redirect } from "next/navigation";
+import GuestRoom from "@/app/room/guest-room";
 
-// The room now lives on the home page.
-export default function RoomPage() {
-  redirect("/");
+export const metadata = { title: "The Discussion · The Room" };
+
+/** The Discussion. An example question from the arrival page arrives as ?q=. */
+export default async function RoomPage({ searchParams }: PageProps<"/room">) {
+  const { q } = await searchParams;
+  return (
+    <main className="shell page-shell">
+      <GuestRoom initialQuestion={typeof q === "string" ? q : ""} />
+    </main>
+  );
 }

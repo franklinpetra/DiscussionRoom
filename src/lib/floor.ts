@@ -76,7 +76,9 @@ const PODCAST_STYLE =
   "Talk the way the best podcast hosts do: warm, curious and conversational. Short spoken " +
   "sentences, contractions, plain words. Good moves: pick up someone's half-finished thought " +
   "and carry it somewhere new; hand a real question to someone by name; land one vivid, " +
-  "concrete specific (a name, a number, a place, an example); an occasional natural \"Wait,\" " +
+  "concrete specific (a name, a number, a place, an example); when you cite a source, name it " +
+  "the way people talk (\"that 2023 Nature study linking…\"), never a web address; an " +
+  "occasional natural \"Wait,\" " +
   "or \"Huh,\" when it leads somewhere. Never a turn that only agrees (\"Exactly,\" \"That's " +
   "right\"), and no filler for its own sake. You are discovering this as you go: when " +
   "something genuinely surprises or delights you, let it show, the way people do when an " +
@@ -148,6 +150,7 @@ export function buildFloorTurnPrompt(
   context: FloorContext,
   model: GuestModel,
   intent?: string,
+  askedBy?: string,
 ): CompletionMessage[] | null {
   const thread = buildFloorThread(context, model);
   if (!thread) return null;
@@ -155,16 +158,34 @@ export function buildFloorTurnPrompt(
     role: "user",
     content:
       `${VOICE}\n\n${CONVERSATION_SPIRIT}\n\n${PODCAST_STYLE}\n\n` +
-      (intent ? `You have the floor. You raised your hand to add: ${intent}\n\n` : "You have the floor.\n\n") +
+      (askedBy
+        ? `${askedBy} just asked you a question. Answer it directly first, then add what hasn't been said if you can.\n\n`
+        : intent
+          ? `You have the floor. You raised your hand to add: ${intent}\n\n`
+          : "You have the floor.\n\n") +
       "Say what hasn't been said, in one or two short sentences; succinct is always better. You " +
       "may pick up anyone's thread, by name, when it leads somewhere new, but you don't need to " +
       "address the last speaker, and never just agree or recap. If someone has already said your " +
       "thought and you have nothing new, reply with exactly PASS.\n\n" +
       `${KEY_PHRASE_INSTRUCTION}\n\n` +
-      "If you would particularly like to write the room's final synthesis, end with a separate " +
-      `line reading exactly ${VOLUNTEER_MARKER}`,
+      "If you put a direct question to one person at the table, add a separate line reading " +
+      "ASK: followed by their name; they will answer next. If you would particularly like to " +
+      `write the room's final synthesis, end with a separate line reading exactly ${VOLUNTEER_MARKER}`,
   });
   return thread;
+}
+
+/** The seat a turn's question was put to, if it names someone else at the table. */
+export function askedSeat(turn: GuestTurn, seats: GuestModel[]): GuestModel | null {
+  const wanted = turn.asks?.toLowerCase();
+  if (!wanted) return null;
+  return (
+    seats.find(
+      (seat) =>
+        seat.id !== turn.model.id &&
+        [seat.nickname, seat.label].some((name) => name && name.toLowerCase() === wanted),
+    ) ?? null
+  );
 }
 
 /** A one-sentence interjection, cut in after a sentence the listener chose. */

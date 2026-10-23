@@ -20,6 +20,7 @@ import {
   buildListenPrompt,
   buildPartingPrompt,
   buildReplyPrompt,
+  askedSeat,
   EXTRA_FLOOR_TURNS,
   MAX_BREAKS,
   MAX_FLOOR_TURNS,
@@ -324,8 +325,8 @@ export default function GuestRoom() {
             ),
           options,
         );
-        const { text, volunteered, keyPhrase } = parseTurnMarkers(turn.text);
-        return { ...turn, text, volunteered, keyPhrase, kind, id: `c${Date.now().toString(36)}-${model.id}` };
+        const { text, volunteered, keyPhrase, asks } = parseTurnMarkers(turn.text);
+        return { ...turn, text, volunteered, keyPhrase, asks, kind, id: `c${Date.now().toString(36)}-${model.id}` };
       } catch (turnError) {
         if (!activeController.signal.aborted) {
           currentRun.errors.push(`${CONVERSATION} · ${model.label}: ${getErrorMessage(turnError)}`);
@@ -383,6 +384,8 @@ export default function GuestRoom() {
       let hands = await listen(context(), others(conversation.at(-1)?.model.id), false);
       let taken = 0;
       let misses = 0;
+      // A seat someone just put a direct question to answers next.
+      let addressed: { model: GuestModel; by: string } | null = null;
       while (taken < maxTurns && misses < 3 && !activeController.signal.aborted) {
         const personText = pendingPersonRef.current;
         if (personText) {
@@ -405,12 +408,19 @@ export default function GuestRoom() {
         }
 
         const last = conversation.at(-1);
-        const chosen =
-          pickNextSpeaker(hands, conversation, last?.model.id) ??
-          (conversation.length ? null : { model: seats[rotation % seats.length], kind: "hand" as const, reason: "" });
+        const askedBy = addressed?.by;
+        const chosen = addressed
+          ? { model: addressed.model, kind: "hand" as const, reason: "" }
+          : (pickNextSpeaker(hands, conversation, last?.model.id) ??
+            (conversation.length ? null : { model: seats[rotation % seats.length], kind: "hand" as const, reason: "" }));
+        addressed = null;
         if (!chosen) break;
-        setStatus(`${chosen.model.label} has the floor…`);
-        const turn = await speak(chosen.model, buildFloorTurnPrompt(context(), chosen.model, chosen.reason || undefined), "turn");
+        setStatus(`${chosen.model.nickname ?? chosen.model.label} has the floor…`);
+        const turn = await speak(
+          chosen.model,
+          buildFloorTurnPrompt(context(), chosen.model, chosen.reason || undefined, askedBy),
+          "turn",
+        );
         if (stopped()) return;
         hands = hands.filter((hand) => hand.model.id !== chosen.model.id);
         if (!turn || isPass(turn.text) || /^(i('|’)ll\s+)?pass\b/i.test(turn.text.trim())) {
@@ -421,6 +431,8 @@ export default function GuestRoom() {
         taken++;
         record({ ...turn, respondingTo: last ? (last.model.id === PERSON.id ? "you" : modelLabel(last)) : undefined });
         const spoken = conversation.at(-1)!;
+        const asked = askedSeat(spoken, seats);
+        if (asked) addressed = { model: asked, by: spoken.model.nickname ?? spoken.model.label };
 
         setStatus("The room is listening…");
         hands = await listen(context(), others(spoken.model.id), breaks < MAX_BREAKS);

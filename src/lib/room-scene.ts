@@ -116,9 +116,10 @@ export function pickVoices<V extends { name: string; lang: string; localService?
     .sort((a, b) => b.score - a.score)
     .map(({ voice }) => voice);
   if (!english.length) return Array.from({ length: count }, () => null);
-  // Like the natural voices, the first seat gets a British (or Australian) voice when the browser has one.
-  const british = english.find((voice) => /en[-_](gb|au)/i.test(voice.lang));
-  const ordered = british ? [british, ...english.filter((voice) => voice !== british)] : english;
+  // Like the natural voices, the first seat gets an Australian (or else British) voice when the browser has one.
+  const accent =
+    english.find((voice) => /en[-_]au/i.test(voice.lang)) ?? english.find((voice) => /en[-_]gb/i.test(voice.lang));
+  const ordered = accent ? [accent, ...english.filter((voice) => voice !== accent)] : english;
   return Array.from({ length: count }, (_, index) => ordered[index % ordered.length]);
 }
 

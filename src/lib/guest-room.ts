@@ -7,6 +7,7 @@ export const MAX_MODELS = 6;
 export const VOLUNTEER_MARKER = "[SYNTHESIZE]";
 export const ANOTHER_ROUND_MARKER = "[ANOTHER ROUND]";
 export const KEY_PHRASE_PREFIX = "KEY:";
+export const ASK_PREFIX = "ASK:";
 export const CHAIRS = ["a", "b", "c", "d", "e", "f", "g"] as const;
 export type Chair = (typeof CHAIRS)[number];
 
@@ -100,6 +101,8 @@ export type GuestTurn = {
   respondingTo?: string;
   /** Someone broke in after this sentence (0-based); the rest went unsaid. */
   cutAt?: number;
+  /** The name of the seat this turn put a direct question to; they answer next. */
+  asks?: string;
 };
 
 /** A listener's real decision after hearing a turn. */
@@ -212,8 +215,23 @@ export function buildIndependentPrompt(
 }
 
 /** Strips the trailing markers a turn may carry: the synthesis volunteer line and the key phrase. */
+/**
+ * Web addresses are for reading, not hearing: a source is named the way people talk
+ * ("the 2023 Nature study…"), so any address a model writes out is dropped.
+ */
+export function withoutWebAddresses(text: string) {
+  return text
+    .replace(/\(?\s*(https?:\/\/|www\.)[^\s)]+\s*\)?/gi, " ")
+    .replace(/\(?\s*\b[\w-]+(\.[\w-]+)*\.(com|org|net|gov|edu|io|ai|app|co|uk|int)\b(\/[^\s)]*)?\s*\)?/gi, " ")
+    .replace(/\(\s*\)/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .trim();
+}
+
 export function parseTurnMarkers(text: string) {
   let keyPhrase: string | undefined;
+  let asks: string | undefined;
   let volunteered = false;
   const kept: string[] = [];
   for (const line of text.trimEnd().split("\n")) {
@@ -223,13 +241,17 @@ export function parseTurnMarkers(text: string) {
       continue;
     }
     const plain = trimmed.replace(/^[*_]+|[*_]+$/g, "");
+    if (plain.toUpperCase().startsWith(ASK_PREFIX)) {
+      asks = plain.slice(ASK_PREFIX.length).replace(/[*_.?!\s]+/g, " ").trim() || undefined;
+      continue;
+    }
     if (plain.toUpperCase().startsWith(KEY_PHRASE_PREFIX)) {
       keyPhrase = plain.slice(KEY_PHRASE_PREFIX.length).replace(/^[*_\s]+|[*_\s]+$/g, "") || undefined;
       continue;
     }
     kept.push(line);
   }
-  return { text: kept.join("\n").trim(), volunteered, keyPhrase };
+  return { text: withoutWebAddresses(kept.join("\n").trim()), volunteered, keyPhrase, asks };
 }
 
 /**

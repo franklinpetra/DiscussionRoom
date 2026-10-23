@@ -236,3 +236,33 @@ describe("sharpen my question", () => {
     expect(parseSharpened("Sure! Here's a better question.")).toBeNull();
   });
 });
+
+describe("direct questions and spoken sources", () => {
+  it("reads who a turn asks, and hands them the floor next", async () => {
+    const { parseTurnMarkers } = await import("@/lib/guest-room");
+    const { askedSeat } = await import("@/lib/floor");
+    const parsed = parseTurnMarkers("Mini, what would change your mind?\nKEY: What changes a mind\nASK: Mini");
+    expect(parsed.asks).toBe("Mini");
+    expect(parsed.text).toBe("Mini, what would change your mind?");
+    const mini = { ...bob, nickname: "Mini" };
+    expect(askedSeat(turn(alice, parsed.text, { asks: "mini" }), [alice, mini, carol])).toEqual(mini);
+    expect(askedSeat(turn(alice, "x", { asks: "Nobody" }), [alice, mini])).toBeNull();
+    expect(askedSeat(turn(mini, "x", { asks: "Mini" }), [alice, mini])).toBeNull();
+  });
+
+  it("tells the asked seat it was asked, and to answer first", () => {
+    const prompt = lastContent(buildFloorTurnPrompt(context([turn(bob, "Alice, why?")]), alice, undefined, "Bob"));
+    expect(prompt).toContain("Bob just asked you a question. Answer it directly first");
+    expect(prompt).toContain("ASK:");
+    expect(prompt).toMatch(/never a web address/);
+  });
+
+  it("drops web addresses from what is said", async () => {
+    const { withoutWebAddresses } = await import("@/lib/guest-room");
+    expect(withoutWebAddresses("A 2023 Nature study (https://www.nature.com/articles/x) found it.")).toBe(
+      "A 2023 Nature study found it.",
+    );
+    expect(withoutWebAddresses("See nature.com/articles/abc for more.")).toBe("See for more.");
+    expect(withoutWebAddresses("Costs fell 4.5% in 2024.")).toBe("Costs fell 4.5% in 2024.");
+  });
+});

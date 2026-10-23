@@ -118,7 +118,7 @@ export default function RoomScene({
     for (const seat of seats) {
       for (const angle of ANGLES) new Image().src = `/chairs/chair-${seat.chair ?? "a"}-${angle}.webp`;
     }
-    for (const hand of ["hand-raised", "hand-raised-back", "hand-break"]) new Image().src = `/hands/${hand}.png`;
+    for (const hand of ["hand-raised-back", "hand-break"]) new Image().src = `/hands/${hand}.png`;
   }, [seats]);
 
   const getAudio = useCallback(
@@ -338,19 +338,14 @@ export default function RoomScene({
               <span className="seat-name" title={seat.label}>{seat.nickname ?? seat.label}</span>
               {handOf.has(seat.id) && (
                 <span className="seat-hand" data-kind={handOf.get(seat.id)!.kind} title={handOf.get(seat.id)!.reason}>
-                  {/* Petra's watercolor hands: a finger for breaking in; raised palms alternate by side. */}
+                  {/* Petra's watercolor hands: a finger for breaking in, a raised hand that faces into the room. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     alt={handOf.get(seat.id)!.kind === "break" ? "Breaking in" : "Hand raised"}
                     className="seat-hand-img"
+                    data-mirror={position.x < 0}
                     draggable={false}
-                    src={
-                      handOf.get(seat.id)!.kind === "break"
-                        ? "/hands/hand-break.png"
-                        : position.x < 0
-                          ? "/hands/hand-raised.png"
-                          : "/hands/hand-raised-back.png"
-                    }
+                    src={handOf.get(seat.id)!.kind === "break" ? "/hands/hand-break.png" : "/hands/hand-raised-back.png"}
                   />
                   <small>{handOf.get(seat.id)!.reason}</small>
                 </span>

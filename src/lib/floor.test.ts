@@ -196,10 +196,11 @@ describe("nicknames", () => {
       "Gemini",
       "DeepSeek",
     ]);
-    const twoClaudes = assignNicknames([
+    const claudes: GuestModel[] = [
       { id: "a", label: "Claude Haiku 5.5", vendor: "Anthropic" },
       { id: "b", label: "Claude Sonnet 5.5", vendor: "Anthropic" },
-    ]);
+    ];
+    const twoClaudes = assignNicknames(claudes);
     expect(twoClaudes.map((model) => model.nickname)).toEqual(["Haiku", "Sonnet"]);
   });
 

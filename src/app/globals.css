@@ -2521,3 +2521,214 @@ a {
   max-width: 70ch;
   margin: 0;
 }
+
+/* ---- How each voice moved the room: a diverging bar per voice ---- */
+.contribution-map {
+  display: grid;
+  gap: 12px;
+  margin-top: 26px;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.contribution-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.contribution-head h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.contribution-scope {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.contribution-scope button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.contribution-scope button[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--paper);
+  font-weight: 600;
+}
+
+.contribution-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.contribution-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.contribution-legend .swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.contribution-axis {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-left: 110px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.contribution-axis span:first-child {
+  padding-right: 8px;
+  text-align: right;
+}
+
+.contribution-axis span:last-child {
+  padding-left: 8px;
+}
+
+.contribution-rows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contribution-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+}
+
+.contribution-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contribution-name .dot,
+.verdict-chip .dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+}
+
+.contribution-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 22px;
+  /* The centre line: left of it held the room back, right of it moved it forward. */
+  background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat;
+}
+
+.contribution-bar .half {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+
+.contribution-bar .back {
+  justify-content: flex-end;
+  padding-right: 2px;
+}
+
+.contribution-bar .forward {
+  padding-left: 2px;
+}
+
+.contribution-bar .segment {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+/* Rounded only at the data ends, square against the centre line. */
+.contribution-bar .back .segment:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.contribution-bar .forward .segment:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.contribution-table summary {
+  color: var(--green-dark);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.contribution-table table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.contribution-table th,
+.contribution-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+
+.contribution-table th:first-child {
+  text-align: left;
+}
+
+.contribution-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.verdict-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  font-size: 11.5px;
+  font-weight: 500;
+}

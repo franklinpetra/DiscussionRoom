@@ -140,6 +140,10 @@ export type GuestRun = {
   hands?: Record<string, Hand[]>;
   /** Tokens and cost of the listening checks, which aren't turns of their own. */
   listening?: { tokens: number; cost: number };
+  /** An outside judge's label for each conversation turn, keyed by turn id (see contributions.ts). */
+  verdicts?: Record<string, { kind: string; reason: string }>;
+  /** The model that judged the turns; it had no seat in the room. */
+  judge?: GuestModel;
 };
 
 export type CompletionMessage = {

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import InfoDialogs from "@/app/room/info-dialogs";
 import KeyControl, { type KeyControlHandle } from "@/app/room/key-control";
 import ModelPicker, { type ModelChoice } from "@/app/room/model-picker";
+import ContributionMap from "@/app/room/contribution-map";
 import PrintReport from "@/app/room/print-report";
 import RoomScene, { type ScenePhase } from "@/app/room/room-scene";
 import {
@@ -53,6 +54,18 @@ import {
   type Hand,
   type LiveTurn,
 } from "@/lib/guest-room";
+import {
+  buildJudgePrompt,
+  kindOf,
+  parseVerdicts,
+  pickJudge,
+  readHistory,
+  recordHistory,
+  tally,
+  type History,
+  type KindId,
+  type Verdict,
+} from "@/lib/contributions";
 import { keyUsage } from "@/lib/openrouter-check";
 import { buildMarkdown } from "@/lib/report";
 import { buildSharpenPrompt, parseSharpened, type Sharpened } from "@/lib/sharpen";
@@ -85,6 +98,17 @@ function writeRotation(value: number) {
   } catch {
     // Without storage the rotation simply restarts each visit.
   }
+}
+
+/** The outside judge's label for a turn, with its reason on hover. */
+function VerdictChip({ verdict }: { verdict: Verdict }) {
+  const kind = kindOf(verdict.kind as KindId);
+  return (
+    <span className="verdict-chip" title={verdict.reason || kind.label}>
+      <span className="dot" style={{ background: kind.color }} aria-hidden="true" />
+      {kind.label}
+    </span>
+  );
 }
 
 /** A turn's cited web addresses, listed in the written record. */
@@ -132,6 +156,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
   const [voiceCharacters, setVoiceCharacters] = useState(0);
   // "Sharpen my question": the suggestion, and the person's own words to go back to.
   const [sharpening, setSharpening] = useState(false);
+  const [history, setHistory] = useState<History>({ runs: [], models: {} });
   const [sharpened, setSharpened] = useState<(Sharpened & { original: string }) | null>(null);
   // What the key had spent when this discussion began, to read the exact charge afterwards.
   const usageAtStart = useRef<Promise<number | null> | null>(null);
@@ -309,6 +334,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
         errors: [...currentRun.errors],
         hands: { ...currentRun.hands },
         listening: { ...currentRun.listening! },
+        verdicts: currentRun.verdicts ? { ...currentRun.verdicts } : undefined,
       });
     publish();
     pendingPersonRef.current = null;
@@ -558,8 +584,41 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
       currentRun.synthesis = synthesis;
       publish();
 
+      // An outside judge labels every conversation turn while the parting thoughts are written.
+      const spokenTurns = currentRun.rounds.find((round) => round.name === CONVERSATION)?.turns ?? [];
+      const judge = pickJudge(seats);
+      const judging = spokenTurns.length
+        ? requestCompletion(
+            apiKey,
+            judge,
+            buildJudgePrompt(cleanQuestion, blind, spokenTurns),
+            activeController.signal,
+            undefined,
+            PARTING_OPTIONS,
+          ).then(
+            (reply) => {
+              currentRun.listening!.tokens += reply.usage?.total_tokens ?? 0;
+              currentRun.listening!.cost += reply.usage?.cost ?? 0;
+              currentRun.verdicts = parseVerdicts(reply.text, spokenTurns);
+              currentRun.judge = judge;
+              setHistory(
+                recordHistory(
+                  readHistory(),
+                  currentRun.createdAt,
+                  seats,
+                  tally(seats, spokenTurns, currentRun.verdicts as Record<string, Verdict>),
+                ),
+              );
+              publish();
+            },
+            () => {
+              // Without a judge the discussion still stands; the chart simply doesn't appear.
+            },
+          )
+        : Promise.resolve();
+
       if (synthesis) {
-        const conversation = currentRun.rounds.find((round) => round.name === CONVERSATION)?.turns ?? [];
+        const conversation = spokenTurns;
         const context: FloorContext = { question: cleanQuestion, attachments, blind, conversation };
         const entries = blind
           .filter(({ model }) => model.id !== synthesizer.id)
@@ -574,6 +633,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
           publish();
         }
       }
+      await judging;
       setStatus(activeController.signal.aborted ? "Stopped." : "The room has spoken.");
     } finally {
       setElapsed(Math.round((performance.now() - startedAt) / 1000));
@@ -888,6 +948,9 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
                         {turn.kind === "reply" && <small> answers {turn.respondingTo}</small>}
                         {turn.kind === "person" && <small> joins in</small>}
                       </strong>
+                      {turn.id && run.verdicts?.[turn.id] && (
+                        <VerdictChip verdict={run.verdicts[turn.id] as Verdict} />
+                      )}
                       {turn.kind !== "person" && <span>{turn.latency}s</span>}
                     </div>
                     {turn.cutAt != null ? (
@@ -929,6 +992,19 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
                 </div>
               )}
             </section>
+          )}
+
+          {run?.verdicts && run.judge && (
+            <ContributionMap
+              counts={tally(
+                runSeats,
+                run.rounds.find((round) => round.name === CONVERSATION)?.turns ?? [],
+                run.verdicts as Record<string, Verdict>,
+              )}
+              history={history}
+              judge={run.judge}
+              seats={runSeats}
+            />
           )}
 
           {!!run?.errors.length && (

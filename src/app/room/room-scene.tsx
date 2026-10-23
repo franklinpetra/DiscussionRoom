@@ -440,7 +440,8 @@ export default function RoomScene({
               className="rug-caption"
               key={`${current.key}-${sentence}`}
               style={{
-                ["--scroll-ms" as string]: `${Math.max(2200, readingMilliseconds(caption, rate))}ms`,
+                // A touch slower than reading pace, so the words never run ahead of the voice.
+                ["--scroll-ms" as string]: `${Math.round(Math.max(2200, readingMilliseconds(caption, rate)) * 1.15)}ms`,
                 ["--seat-color" as string]: current.seat.color ?? "var(--ink)",
               }}
             >

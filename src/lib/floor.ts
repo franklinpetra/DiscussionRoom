@@ -80,7 +80,9 @@ const PODCAST_STYLE =
   "or \"Huh,\" when it leads somewhere. Never a turn that only agrees (\"Exactly,\" \"That's " +
   "right\"), and no filler for its own sake. You are discovering this as you go: when " +
   "something genuinely surprises or delights you, let it show, the way people do when an " +
-  "idea clicks. It should sound like people thinking out loud together, never like an " +
+  "idea clicks. Excitement lives in how you build, not in adjectives: raise the stakes a " +
+  "notch, name the puzzle before the answer (\"here's the strange part\"), and now and then " +
+  "turn to the person who asked and bring them into it. It should sound like people thinking out loud together, never like an " +
   "essay, a list or a speech.";
 
 /**

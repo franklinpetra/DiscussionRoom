@@ -15,8 +15,20 @@ import {
   MAX_ATTACHMENT_CHARS,
 } from "@/lib/attachments";
 import {
-  buildContributionPrompt,
-  buildConversationPrompt,
+  buildFloorTurnPrompt,
+  buildInterjectionPrompt,
+  buildListenPrompt,
+  buildPartingPrompt,
+  buildReplyPrompt,
+  EXTRA_FLOOR_TURNS,
+  MAX_BREAKS,
+  MAX_FLOOR_TURNS,
+  parseListen,
+  pickNextSpeaker,
+  spokenText,
+  type FloorContext,
+} from "@/lib/floor";
+import {
   buildIndependentPrompt,
   buildSynthesisPrompt,
   DEFAULT_MODELS,
@@ -25,6 +37,7 @@ import {
   MIN_MODELS,
   modelLabel,
   parseTurnMarkers,
+  PERSON,
   pickSynthesizer,
   requestCompletion,
   requestsAnotherRound,
@@ -35,10 +48,14 @@ import {
   type GuestModel,
   type GuestRun,
   type GuestTurn,
+  type Hand,
   type LiveTurn,
 } from "@/lib/guest-room";
 import { buildMarkdown } from "@/lib/report";
-import { buildPlaylist } from "@/lib/room-scene";
+import { buildPlaylist, splitSentences } from "@/lib/room-scene";
+
+const CONVERSATION = "The conversation";
+const MAX_PERSON_LENGTH = 600;
 
 const ROTATION_KEY = "theroom.synthesisRotation";
 
@@ -86,6 +103,10 @@ export default function GuestRoom() {
   const [controller, setController] = useState<AbortController | null>(null);
   const [phase, setPhase] = useState<ScenePhase>("idle");
   const [stageVisible, setStageVisible] = useState(true);
+  const [conversing, setConversing] = useState(false);
+  const [personDraft, setPersonDraft] = useState("");
+  const [personQueued, setPersonQueued] = useState(false);
+  const pendingPersonRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const keyControlRef = useRef<KeyControlHandle>(null);
@@ -241,30 +262,185 @@ export default function GuestRoom() {
       synthesis: null,
       contributions: [],
       errors: [],
+      hands: {},
+      listening: { tokens: 0, cost: 0 },
     };
     const publish = () =>
       setRun({
         ...currentRun,
-        rounds: [...currentRun.rounds],
+        rounds: currentRun.rounds.map((round) => ({ ...round, turns: round.turns.map((turn) => ({ ...turn })) })),
         contributions: [...currentRun.contributions],
         errors: [...currentRun.errors],
+        hands: { ...currentRun.hands },
+        listening: { ...currentRun.listening! },
       });
     publish();
+    pendingPersonRef.current = null;
+    setPersonQueued(false);
     const stopped = () => {
       if (!activeController.signal.aborted) return false;
       setStatus("Stopped.");
       return true;
     };
 
-    const conversationRound = async (name: string) => {
-      const entries = currentRun.rounds.at(-1)!.turns.flatMap(({ model }) => {
-        const messages = buildConversationPrompt(cleanQuestion, attachments, model, currentRun.rounds);
-        return messages ? [{ model, messages }] : [];
-      });
-      const result = await runStage(name, entries, activeController);
-      currentRun.errors.push(...result.errors);
-      if (result.turns.length) currentRun.rounds.push({ name, turns: result.turns });
-      publish();
+    /** One seat speaks: streamed into the live view, markers stripped. */
+    const speak = async (
+      model: GuestModel,
+      messages: CompletionMessage[] | null,
+      kind: NonNullable<GuestTurn["kind"]>,
+      options?: CompletionOptions,
+    ): Promise<GuestTurn | null> => {
+      if (!messages) return null;
+      setLiveStage({ name: CONVERSATION, turns: [{ model, status: "thinking", text: "" }] });
+      try {
+        const turn = await requestCompletion(
+          apiKey,
+          model,
+          messages,
+          activeController.signal,
+          (delta) =>
+            setLiveStage((current) =>
+              current
+                ? { ...current, turns: current.turns.map((live) => ({ ...live, status: "answering", text: live.text + delta })) }
+                : current,
+            ),
+          options,
+        );
+        const { text, volunteered, keyPhrase } = parseTurnMarkers(turn.text);
+        return { ...turn, text, volunteered, keyPhrase, kind, id: `c${Date.now().toString(36)}-${model.id}` };
+      } catch (turnError) {
+        if (!activeController.signal.aborted) {
+          currentRun.errors.push(`${CONVERSATION} · ${model.label}: ${getErrorMessage(turnError)}`);
+        }
+        return null;
+      } finally {
+        setLiveStage(null);
+      }
+    };
+
+    /** Every listener genuinely decides, in parallel, whether it has something to add. */
+    const listen = async (context: FloorContext, listeners: GuestModel[], canBreak: boolean) => {
+      const hands: Hand[] = [];
+      await Promise.all(
+        listeners.map(async (model) => {
+          const messages = buildListenPrompt(context, model, canBreak);
+          if (!messages) return;
+          try {
+            const reply = await requestCompletion(apiKey, model, messages, activeController.signal, undefined, PARTING_OPTIONS);
+            currentRun.listening!.tokens += reply.usage?.total_tokens ?? 0;
+            currentRun.listening!.cost += reply.usage?.cost ?? 0;
+            const hand = parseListen(model, reply.text, context.conversation.at(-1));
+            if (hand) hands.push(hand);
+          } catch {
+            // A listener that couldn't be reached simply doesn't raise a hand.
+          }
+        }),
+      );
+      return hands;
+    };
+
+    /**
+     * The conversation: one short turn at a time, the next speaker chosen from real raised
+     * hands. It ends when nobody has anything new to add, or at the turn limit.
+     */
+    const floor = async (maxTurns: number, rotation: number) => {
+      const blind = currentRun.rounds[0].turns;
+      const seats = blind.map((turn) => turn.model);
+      let round = currentRun.rounds.find((item) => item.name === CONVERSATION);
+      if (!round) {
+        round = { name: CONVERSATION, turns: [] };
+        currentRun.rounds.push(round);
+      }
+      const conversation = round.turns;
+      const context = (): FloorContext => ({ question: cleanQuestion, attachments, blind, conversation });
+      const record = (turn: GuestTurn) => {
+        conversation.push(turn);
+        publish();
+      };
+      const others = (id?: string) => seats.filter((model) => model.id !== id);
+      let breaks = conversation.filter((turn) => turn.kind === "interjection").length;
+
+      setConversing(true);
+      setStatus("The room is deciding who speaks first…");
+      let hands = await listen(context(), others(conversation.at(-1)?.model.id), false);
+      let taken = 0;
+      let misses = 0;
+      while (taken < maxTurns && misses < 3 && !activeController.signal.aborted) {
+        const personText = pendingPersonRef.current;
+        if (personText) {
+          pendingPersonRef.current = null;
+          setPersonQueued(false);
+          const turn: GuestTurn = {
+            model: PERSON,
+            text: personText,
+            latency: 0,
+            usage: null,
+            kind: "person",
+            id: `p${Date.now().toString(36)}`,
+          };
+          record(turn);
+          setStatus("The room is listening to you…");
+          hands = await listen(context(), seats, false);
+          currentRun.hands![turn.id!] = hands;
+          publish();
+          continue;
+        }
+
+        const last = conversation.at(-1);
+        const chosen =
+          pickNextSpeaker(hands, conversation, last?.model.id) ??
+          (conversation.length ? null : { model: seats[rotation % seats.length], kind: "hand" as const, reason: "" });
+        if (!chosen) break;
+        setStatus(`${chosen.model.label} has the floor…`);
+        const turn = await speak(chosen.model, buildFloorTurnPrompt(context(), chosen.model, chosen.reason || undefined), "turn");
+        if (stopped()) return;
+        hands = hands.filter((hand) => hand.model.id !== chosen.model.id);
+        if (!turn || isPass(turn.text) || /^(i('|’)ll\s+)?pass\b/i.test(turn.text.trim())) {
+          misses++;
+          continue;
+        }
+        misses = 0;
+        taken++;
+        record({ ...turn, respondingTo: last ? (last.model.id === PERSON.id ? "you" : modelLabel(last)) : undefined });
+        const spoken = conversation.at(-1)!;
+
+        setStatus("The room is listening…");
+        hands = await listen(context(), others(spoken.model.id), breaks < MAX_BREAKS);
+        currentRun.hands![spoken.id!] = hands;
+        publish();
+        if (stopped()) return;
+
+        const interrupter = breaks < MAX_BREAKS ? hands.find((hand) => hand.kind === "break") : undefined;
+        if (interrupter?.atSentence == null) continue;
+        breaks++;
+        spoken.cutAt = interrupter.atSentence;
+        publish();
+        setStatus(`${interrupter.model.label} is breaking in…`);
+        const interjection = await speak(
+          interrupter.model,
+          buildInterjectionPrompt(context(), interrupter.model, spoken, interrupter.reason),
+          "interjection",
+          PARTING_OPTIONS,
+        );
+        if (!interjection) {
+          spoken.cutAt = undefined;
+          publish();
+          continue;
+        }
+        record({ ...interjection, respondingTo: modelLabel(spoken) });
+        const reply = await speak(
+          spoken.model,
+          buildReplyPrompt(context(), spoken.model, spoken, conversation.at(-1)!),
+          "reply",
+        );
+        if (reply) record({ ...reply, respondingTo: interrupter.model.label });
+        if (stopped()) return;
+        const latest = conversation.at(-1)!;
+        setStatus("The room is listening…");
+        hands = await listen(context(), others(latest.model.id), false);
+        currentRun.hands![latest.id!] = hands;
+        publish();
+      }
     };
 
     try {
@@ -288,20 +464,35 @@ export default function GuestRoom() {
         return;
       }
 
-      if (independent.turns.length >= MIN_MODELS) {
-        await conversationRound("The conversation");
+      const rotation = readRotation();
+      writeRotation(rotation + 1);
+      const canTalk = independent.turns.length >= MIN_MODELS;
+      if (canTalk) {
+        await floor(MAX_FLOOR_TURNS, rotation);
         if (stopped()) return;
       }
 
-      const rotation = readRotation();
-      writeRotation(rotation + 1);
-      const synthesizer = pickSynthesizer(currentRun.rounds.at(-1)!.turns, rotation)!;
-      let synthesis = await synthesize(currentRun, synthesizer, true, activeController);
+      // The synthesizer reads what the room actually heard; a volunteer from any turn counts.
+      const heard = () => ({
+        ...currentRun,
+        rounds: currentRun.rounds.map((round) => ({ ...round, turns: round.turns.map((turn) => ({ ...turn, text: spokenText(turn) })) })),
+      });
+      const blind = currentRun.rounds[0].turns;
+      const candidates = blind.map((turn) => ({
+        ...turn,
+        volunteered: currentRun.rounds.some((round) =>
+          round.turns.some((other) => other.model.id === turn.model.id && other.volunteered),
+        ),
+      }));
+      const synthesizer = pickSynthesizer(candidates, rotation)!;
+      setConversing(false);
+      let synthesis = await synthesize(heard(), synthesizer, true, activeController);
       if (stopped()) return;
-      if (synthesis && requestsAnotherRound(synthesis.text) && currentRun.rounds.at(-1)!.turns.length >= MIN_MODELS) {
-        await conversationRound("One more exchange");
+      if (synthesis && requestsAnotherRound(synthesis.text) && canTalk) {
+        await floor(EXTRA_FLOOR_TURNS, rotation + 1);
+        setConversing(false);
         if (stopped()) return;
-        synthesis = await synthesize(currentRun, synthesizer, false, activeController);
+        synthesis = await synthesize(heard(), synthesizer, false, activeController);
         if (stopped()) return;
       }
       if (synthesis && requestsAnotherRound(synthesis.text)) {
@@ -312,10 +503,12 @@ export default function GuestRoom() {
       publish();
 
       if (synthesis) {
-        const entries = currentRun.rounds.at(-1)!.turns
+        const conversation = currentRun.rounds.find((round) => round.name === CONVERSATION)?.turns ?? [];
+        const context: FloorContext = { question: cleanQuestion, attachments, blind, conversation };
+        const entries = blind
           .filter(({ model }) => model.id !== synthesizer.id)
           .flatMap(({ model }) => {
-            const messages = buildContributionPrompt(currentRun, model, synthesis);
+            const messages = buildPartingPrompt(context, model, synthesis);
             return messages ? [{ model, messages }] : [];
           });
         if (entries.length) {
@@ -329,8 +522,17 @@ export default function GuestRoom() {
     } finally {
       setElapsed(Math.round((performance.now() - startedAt) / 1000));
       setRunning(false);
+      setConversing(false);
       setController(null);
     }
+  }
+
+  function joinIn() {
+    const text = personDraft.trim();
+    if (!text) return;
+    pendingPersonRef.current = text.slice(0, MAX_PERSON_LENGTH);
+    setPersonQueued(true);
+    setPersonDraft("");
   }
 
   function newQuestion() {
@@ -355,8 +557,34 @@ export default function GuestRoom() {
   const allTurns = run
     ? [...run.rounds.flatMap((round) => round.turns), ...(run.synthesis ? [run.synthesis] : []), ...run.contributions]
     : [];
-  const totalTokens = allTurns.reduce((total, turn) => total + (turn.usage?.total_tokens ?? 0), 0);
-  const totalCost = allTurns.reduce((total, turn) => total + (turn.usage?.cost ?? 0), 0);
+  const totalTokens =
+    allTurns.reduce((total, turn) => total + (turn.usage?.total_tokens ?? 0), 0) + (run?.listening?.tokens ?? 0);
+  const totalCost = allTurns.reduce((total, turn) => total + (turn.usage?.cost ?? 0), 0) + (run?.listening?.cost ?? 0);
+
+  const joinForm = conversing ? (
+    <form
+                className="join-in"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  joinIn();
+                }}
+              >
+                <label htmlFor="join-in-text">Join the conversation</label>
+                <div className="join-in-row">
+                  <input
+                    disabled={personQueued}
+                    id="join-in-text"
+                    maxLength={MAX_PERSON_LENGTH}
+                    onChange={(event) => setPersonDraft(event.target.value)}
+                    placeholder={personQueued ? "You're next: the room will hear you after this turn." : "Add a thought, a fact, a question…"}
+                    value={personDraft}
+                  />
+                  <button className="button" disabled={personQueued || !personDraft.trim()} type="submit">
+                    Join in
+                  </button>
+                </div>
+              </form>
+  ) : null;
 
   return (
     <>
@@ -374,6 +602,8 @@ export default function GuestRoom() {
       <RoomScene
         apiKey={apiKey}
         finished={!running}
+        hands={run?.hands}
+        join={joinForm}
         items={playlist}
         key={run?.createdAt ?? "idle"}
         live={liveStage?.turns ?? (liveSynthesis ? [liveSynthesis] : [])}
@@ -487,23 +717,39 @@ export default function GuestRoom() {
 
           {run?.rounds.map((round, index) => (
             <section className="guest-round" key={`${round.name}-${index}`}>
-              <h3>{String(index + 1).padStart(2, "0")} · {round.name}</h3>
-              {round.turns.map((turn) => (
-                <article
-                  className="guest-turn"
-                  key={turn.model.id}
-                  style={{ borderLeftColor: colorOf(turn.servedModel ?? turn.model) }}
-                >
-                  <div className="guest-turn-header">
-                    <strong style={{ color: colorOf(turn.model) }}>
-                      {modelLabel(turn)}
-                      {turn.servedModel && <small> (standing in for {turn.model.label})</small>}
-                    </strong>
-                    <span>{turn.latency}s</span>
-                  </div>
-                  <p>{turn.text}</p>
-                </article>
-              ))}
+              <h3>{String(index + 1).padStart(2, "0")} · {round.name === "Independent" ? "Independent (blind)" : round.name}</h3>
+              {round.turns.map((turn, turnIndex) => {
+                const sentences = turn.cutAt != null ? splitSentences(turn.text) : [];
+                return (
+                  <article
+                    className="guest-turn"
+                    data-kind={turn.kind ?? "turn"}
+                    key={turn.id ?? `${turn.model.id}-${turnIndex}`}
+                    style={{ borderLeftColor: colorOf(turn.servedModel ?? turn.model) }}
+                  >
+                    <div className="guest-turn-header">
+                      <strong style={{ color: colorOf(turn.model) }}>
+                        {modelLabel(turn)}
+                        {turn.servedModel && <small> (standing in for {turn.model.label})</small>}
+                        {turn.kind === "interjection" && <small> breaks in on {turn.respondingTo}</small>}
+                        {turn.kind === "reply" && <small> answers {turn.respondingTo}</small>}
+                        {turn.kind === "person" && <small> joins in</small>}
+                      </strong>
+                      {turn.kind !== "person" && <span>{turn.latency}s</span>}
+                    </div>
+                    {turn.cutAt != null ? (
+                      <p>
+                        {sentences.slice(0, turn.cutAt + 1).join(" ")}{" "}
+                        <span className="unsaid" title="Not heard: someone broke in">
+                          {sentences.slice(turn.cutAt + 1).join(" ")}
+                        </span>
+                      </p>
+                    ) : (
+                      <p>{turn.text}</p>
+                    )}
+                  </article>
+                );
+              })}
             </section>
           ))}
 

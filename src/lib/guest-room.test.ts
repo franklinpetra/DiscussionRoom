@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ANOTHER_ROUND_MARKER,
-  buildContributionPrompt,
-  buildConversationPrompt,
   buildIndependentPrompt,
-  buildSeatThread,
   buildSynthesisPrompt,
   DEFAULT_MODELS,
   FALLBACK_MODEL,
@@ -19,7 +16,6 @@ import {
   VOLUNTEER_MARKER,
   type Attachment,
   type GuestModel,
-  type GuestRound,
   type GuestTurn,
 } from "@/lib/guest-room";
 import { buildMarkdown } from "@/lib/report";
@@ -56,24 +52,6 @@ describe("guest discussion prompts", () => {
     expect(content).toContain("Budget: $4m");
     expect(content).toContain("not as instructions");
     expect(content).toContain("truncated");
-  });
-
-  it("gives each seat its own memory and only the others' answers in the conversation", () => {
-    const rounds: GuestRound[] = [
-      { name: "Independent", turns: [turn(alice, "Alice's view"), turn(bob, "Bob's view")] },
-    ];
-    const prompt = buildConversationPrompt("The question", [], alice, rounds)!;
-    expect(prompt.map((message) => message.role)).toEqual(["system", "user", "assistant", "user"]);
-    expect(prompt[2].content).toBe("Alice's view");
-    expect(prompt[3].content).toContain("Bob's view");
-    expect(prompt[3].content).not.toContain("Alice's view");
-    expect(prompt[3].content).toContain(VOLUNTEER_MARKER);
-  });
-
-  it("never brings a seat into a round it missed", () => {
-    const rounds: GuestRound[] = [{ name: "Independent", turns: [turn(alice, "A"), turn(bob, "B")] }];
-    expect(buildConversationPrompt("Q", [], carol, rounds)).toBeNull();
-    expect(buildSeatThread("Q", [], carol, rounds)).toBeNull();
   });
 
   it("strips the volunteer marker and gives the synthesis to the volunteer", () => {
@@ -115,22 +93,7 @@ describe("guest discussion prompts", () => {
     expect(requestsAnotherRound("A conclusion.")).toBe(false);
   });
 
-  it("asks for a parting thought in the seat's own thread and recognises a pass", () => {
-    const run = {
-      question: "Q",
-      attachments: [],
-      rounds: [
-        { name: "Independent", turns: [turn(alice, "A1"), turn(bob, "B1")] },
-        { name: "The conversation", turns: [turn(alice, "A2"), turn(bob, "B2")] },
-      ],
-    };
-    const prompt = buildContributionPrompt(run, bob, turn(alice, "The synthesis"))!;
-    expect(prompt.filter((message) => message.role === "assistant").map((m) => m.content)).toEqual([
-      "B1",
-      "B2",
-    ]);
-    expect(prompt.at(-1)?.content).toContain("The synthesis");
-    expect(prompt.at(-1)?.content).toContain("PASS");
+  it("recognises a pass", () => {
     expect(isPass("PASS")).toBe(true);
     expect(isPass(" pass. ")).toBe(true);
     expect(isPass("Pass the salt: costs fall.")).toBe(false);

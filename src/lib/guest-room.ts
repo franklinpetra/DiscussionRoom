@@ -32,6 +32,9 @@ export const DEFAULT_MODELS: readonly GuestModel[] = [
   { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", vendor: "DeepSeek", color: "#6a4fb3", chair: "e" },
 ];
 
+/** The person who asked, when they join the conversation. Never seated, never sent to a model. */
+export const PERSON: GuestModel = { id: "person", label: "You", vendor: "The person who asked", color: "#2b2f2c" };
+
 // Colours handed to models a user adds from the catalog, in order.
 export const ADDED_MODEL_COLORS = ["#a23c6b", "#8a6d1f", "#2c7f8f", "#7a4a2a", "#4f5d75", "#b03a3a"];
 
@@ -56,6 +59,23 @@ export type GuestTurn = {
   usage: Usage | null;
   volunteered?: boolean;
   keyPhrase?: string;
+  /** Conversation turns only: a stable id, so a seat can speak more than once. */
+  id?: string;
+  /** turn: took the floor · interjection: broke in · reply: answered an interjection · person: the asker joined in. */
+  kind?: "turn" | "interjection" | "reply" | "person";
+  /** Label of the speaker this turn answers. */
+  respondingTo?: string;
+  /** Someone broke in after this sentence (0-based); the rest went unsaid. */
+  cutAt?: number;
+};
+
+/** A listener's real decision after hearing a turn. */
+export type Hand = {
+  model: GuestModel;
+  kind: "hand" | "break";
+  reason: string;
+  /** For a break: the sentence (0-based) the listener cut in after. */
+  atSentence?: number;
 };
 
 export type LiveTurn = {
@@ -78,6 +98,10 @@ export type GuestRun = {
   synthesis: GuestTurn | null;
   contributions: GuestTurn[];
   errors: string[];
+  /** Hands raised after each conversation turn, keyed by the turn's id. */
+  hands?: Record<string, Hand[]>;
+  /** Tokens and cost of the listening checks, which aren't turns of their own. */
+  listening?: { tokens: number; cost: number };
 };
 
 export type CompletionMessage = {
@@ -92,7 +116,7 @@ type CompletionResponse = {
   error?: { message?: string };
 };
 
-const VOICE =
+export const VOICE =
   "Think expansively; report selectively. Look for overlooked evidence, hidden assumptions, " +
   "unexpected connections, causal relationships, previously invisible opportunities and " +
   "second-order consequences. Avoid manufactured novelty, artificial disagreement, predictable " +
@@ -102,7 +126,7 @@ const VOICE =
   "claims with verifiable sources where you can; never invent a citation or present an " +
   "unverified claim as established. Write prose, without headings or bullet lists.";
 
-const KEY_PHRASE_INSTRUCTION =
+export const KEY_PHRASE_INSTRUCTION =
   "Finally, on a separate last line, write KEY: followed by the heart of your point in eight " +
   "words or fewer. It will be shown on its own, so make it vivid and self-contained.";
 
@@ -118,6 +142,11 @@ const INDEPENDENT_SYSTEM =
 
 export function modelLabel(turn: GuestTurn) {
   return (turn.servedModel ?? turn.model).label;
+}
+
+/** How a turn's speaker is named to the models: the asker is "the person who asked", not "You". */
+export function speakerName(turn: GuestTurn) {
+  return turn.model.id === PERSON.id ? "The person who asked" : modelLabel(turn);
 }
 
 export function buildQuestionContent(question: string, attachments: Attachment[]) {
@@ -146,84 +175,6 @@ export function buildIndependentPrompt(
     { role: "system", content: INDEPENDENT_SYSTEM },
     { role: "user", content: buildQuestionContent(question, attachments) },
   ];
-}
-
-function othersBlock(others: GuestTurn[]) {
-  return others
-    .map((turn) => {
-      const responder = turn.servedModel ?? turn.model;
-      return `--- ${responder.label} (${responder.vendor}) ---\n${turn.text}`;
-    })
-    .join("\n\n");
-}
-
-function conversationInstruction(roomSize: number, extraRound: boolean) {
-  return (
-    (extraRound
-      ? "The room's synthesizer asked for one more exchange because the conclusion is not " +
-        "ready yet. Above are the latest contributions from the others.\n\n"
-      : `You were not alone. ${roomSize - 1} other participants answered the same question ` +
-        "independently; their answers are above. This is the conversation.\n\n") +
-    "Consider how best to advance the discussion. What changed your understanding? What " +
-    "unexpected connection or consequential implication deserves attention? Challenge an " +
-    "assumption, introduce evidence, or strengthen and connect promising ideas; if persuaded, " +
-    "revise your position. Identify precise disagreements without manufacturing conflict or " +
-    "repeating established points. Agreement alone is not progress. Wit, levity or a " +
-    "provocative question are welcome when they honestly sharpen the insight. Refer to others " +
-    "by name.\n\n" +
-    "Aim for three or fewer exceptionally concise sentences; take more room only if the idea " +
-    "truly needs it. If you have nothing meaningful to add, say so in one sentence rather than " +
-    "repeating yourself.\n\n" +
-    `${KEY_PHRASE_INSTRUCTION}\n\n` +
-    "If you would particularly like to write the room's final synthesis, end with a separate " +
-    `line reading exactly ${VOLUNTEER_MARKER}`
-  );
-}
-
-/**
- * A seat's memory is its own turns plus what it was shown. It never sees its own answer
- * played back as someone else's, and never sees a round it missed.
- */
-export function buildSeatThread(
-  question: string,
-  attachments: Attachment[],
-  model: GuestModel,
-  rounds: GuestRound[],
-): CompletionMessage[] | null {
-  const messages = buildIndependentPrompt(question, attachments);
-  for (const [index, round] of rounds.entries()) {
-    const own = round.turns.find((turn) => turn.model.id === model.id);
-    if (!own) return index === 0 ? null : messages;
-    if (index > 0) {
-      const previous = rounds[index - 1];
-      const roomSize = previous.turns.length;
-      messages.push({
-        role: "user",
-        content:
-          `${othersBlock(previous.turns.filter((turn) => turn.model.id !== model.id))}\n\n` +
-          conversationInstruction(roomSize, index > 1),
-      });
-    }
-    messages.push({ role: "assistant", content: own.text });
-  }
-  return messages;
-}
-
-export function buildConversationPrompt(
-  question: string,
-  attachments: Attachment[],
-  model: GuestModel,
-  rounds: GuestRound[],
-): CompletionMessage[] | null {
-  const thread = buildSeatThread(question, attachments, model, rounds);
-  const latest = rounds.at(-1);
-  if (!thread || !latest?.turns.some((turn) => turn.model.id === model.id)) return null;
-  const others = latest.turns.filter((turn) => turn.model.id !== model.id);
-  thread.push({
-    role: "user",
-    content: `${othersBlock(others)}\n\n${conversationInstruction(latest.turns.length, rounds.length > 1)}`,
-  });
-  return thread;
 }
 
 /** Strips the trailing markers a turn may carry: the synthesis volunteer line and the key phrase. */
@@ -264,7 +215,7 @@ function transcriptText(rounds: GuestRound[]) {
     .map(
       (round) =>
         `===== ${round.name} =====\n\n` +
-        round.turns.map((turn) => `--- ${modelLabel(turn)} ---\n${turn.text}`).join("\n\n"),
+        round.turns.map((turn) => `--- ${speakerName(turn)} ---\n${turn.text}`).join("\n\n"),
     )
     .join("\n\n");
 }
@@ -315,25 +266,6 @@ export function buildSynthesisPrompt(
 
 export function requestsAnotherRound(text: string) {
   return text.trim().startsWith(ANOTHER_ROUND_MARKER);
-}
-
-export function buildContributionPrompt(
-  run: Pick<GuestRun, "question" | "attachments" | "rounds">,
-  model: GuestModel,
-  synthesis: GuestTurn,
-): CompletionMessage[] | null {
-  const thread = buildSeatThread(run.question, run.attachments, model, run.rounds);
-  if (!thread) return null;
-  thread.push({
-    role: "user",
-    content:
-      `The room's synthesis, written by ${modelLabel(synthesis)}:\n\n${synthesis.text}\n\n` +
-      "Parting thought: share the one thing you most want the reader to take away, perhaps a " +
-      "consequential insight the synthesis left out or your carefully edited strongest point. " +
-      "One or two exceptionally economical sentences. Do not summarize. If you have nothing " +
-      "valuable to add, reply with exactly PASS.",
-  });
-  return thread;
 }
 
 export function isPass(text: string) {

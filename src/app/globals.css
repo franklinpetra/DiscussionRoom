@@ -1943,3 +1943,116 @@ a {
 .stage-center .seat-chips {
   gap: 6px;
 }
+
+/* Raised hands: listeners with something new to add, shown while the speaker talks. */
+.seat-hand {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 170px;
+  padding: 3px 9px 3px 6px;
+  border: 1px solid var(--seat-color);
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 4px 14px rgb(25 28 25 / 12%);
+  font-size: 11px;
+  line-height: 1.2;
+  transform: translate(-50%, -100%);
+  animation: hand-up 420ms cubic-bezier(0.2, 0.9, 0.3, 1.3);
+  z-index: 30;
+}
+
+.seat-hand > span {
+  font-size: 14px;
+}
+
+.seat-hand small {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat-hand[data-kind="break"] {
+  color: #fff;
+  background: var(--seat-color);
+}
+
+.seat-hand[data-kind="break"] > span {
+  font-weight: 800;
+}
+
+.seat-hand[data-kind="break"] small {
+  color: rgb(255 255 255 / 88%);
+}
+
+@keyframes hand-up {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -60%) scale(0.85);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seat-hand {
+    animation: none;
+  }
+}
+
+/* The person who asked can join in while the room is talking. */
+.join-in {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 560px);
+  margin-top: 12px;
+}
+
+.join-in label {
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.join-in-row {
+  display: flex;
+  gap: 8px;
+}
+
+.join-in-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+  font-size: 15px;
+}
+
+.join-in-row input:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+/* What went unsaid when someone broke in. */
+.unsaid {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: rgb(114 121 111 / 50%);
+}
+
+.guest-turn[data-kind="interjection"],
+.guest-turn[data-kind="reply"] {
+  margin-left: 22px;
+}
+
+.guest-turn[data-kind="person"] {
+  background: var(--warm);
+}

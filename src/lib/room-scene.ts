@@ -45,6 +45,9 @@ export type PlayItem = {
   stage: PlayStage;
   text: string;
   phrase: string;
+  kind?: GuestTurn["kind"];
+  /** Playback stops after this sentence: someone broke in. */
+  cutAt?: number;
 };
 
 function fallbackPhrase(text: string) {
@@ -60,15 +63,17 @@ function item(turn: GuestTurn, stage: PlayStage, key: string): PlayItem {
     stage,
     text: turn.text,
     phrase: turn.keyPhrase || fallbackPhrase(turn.text),
+    kind: turn.kind,
+    cutAt: turn.cutAt,
   };
 }
 
-/** The order in which the room speaks: each round in seat order, then synthesis, then parting lines. */
+/** The order in which the room speaks: the blind round, the conversation as it happened, then synthesis and parting lines. */
 export function buildPlaylist(run: GuestRun): PlayItem[] {
   const items: PlayItem[] = [];
   run.rounds.forEach((round, index) => {
     for (const turn of round.turns) {
-      items.push(item(turn, round.name as PlayStage, `${index}-${turn.model.id}`));
+      items.push(item(turn, round.name as PlayStage, turn.id ?? `${index}-${turn.model.id}`));
     }
   });
   if (run.synthesis) items.push(item(run.synthesis, "Synthesis", "synthesis"));

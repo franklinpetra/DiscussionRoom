@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { parseTurnMarkers, type GuestModel, type LiveTurn } from "@/lib/guest-room";
+import { parseTurnMarkers, PERSON, type GuestModel, type Hand, type LiveTurn } from "@/lib/guest-room";
 import {
   attentionPoint,
   facingAngle,
@@ -33,6 +33,10 @@ type RoomSceneProps = {
   /** What sits in the middle of the room before a question is asked: the question box. */
   children?: ReactNode;
   stageRef?: Ref<HTMLDivElement>;
+  /** Hands raised after each conversation turn, keyed by playlist key. */
+  hands?: Record<string, Hand[]>;
+  /** The "Join in" box, shown under the controls while the room is talking. */
+  join?: ReactNode;
 };
 
 function synth() {
@@ -49,6 +53,8 @@ export default function RoomScene({
   question,
   children,
   stageRef,
+  hands,
+  join,
 }: RoomSceneProps) {
   const [index, setIndex] = useState(0);
   const [sentence, setSentence] = useState(0);
@@ -60,7 +66,7 @@ export default function RoomScene({
   const rateRef = useRef(rate);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCache = useRef(new Map<string, Promise<string>>());
-  const effectiveMode: VoiceMode = mode === "natural" && (naturalError || !apiKey) ? "browser" : mode;
+  const roomMode: VoiceMode = mode === "natural" && (naturalError || !apiKey) ? "browser" : mode;
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => synth()?.getVoices() ?? []);
 
   const positions = useMemo(() => seatPositions(seats.length), [seats.length]);
@@ -69,7 +75,12 @@ export default function RoomScene({
   const current = items[index] ?? null;
   const currentKey = current?.key;
   const currentText = current?.text ?? "";
+  // The person's own words are shown, not spoken back to them.
+  const effectiveMode: VoiceMode = current?.seat.id === PERSON.id ? "captions" : roomMode;
   const sentences = useMemo(() => (currentText ? splitSentences(currentText) : []), [currentText]);
+  // Someone broke in: the speaker stops after this many sentences.
+  const spokenCount = current?.cutAt != null ? Math.min(current.cutAt + 1, sentences.length) : sentences.length;
+  const spokenCountRef = useRef(spokenCount);
   const caption = sentences[sentence] ?? "";
   const speakerSeat = current ? seatIndex.get(current.seat.id) ?? -1 : -1;
   const done = finished && index >= items.length;
@@ -109,11 +120,16 @@ export default function RoomScene({
 
   // Fetch the current and next turn's audio ahead, so speakers follow each other without gaps.
   useEffect(() => {
-    if (effectiveMode !== "natural" || phase === "idle" || phase === "writing") return;
+    if (roomMode !== "natural" || phase === "idle" || phase === "writing") return;
     for (const upcoming of items.slice(index, index + 2)) {
+      if (upcoming.seat.id === PERSON.id) continue;
       getAudio(upcoming.key, upcoming.text, seatIndex.get(upcoming.seat.id) ?? 0).catch(() => {});
     }
-  }, [effectiveMode, items, index, getAudio, seatIndex, phase]);
+  }, [roomMode, items, index, getAudio, seatIndex, phase]);
+
+  useEffect(() => {
+    spokenCountRef.current = spokenCount;
+  }, [spokenCount]);
 
   useEffect(() => {
     if (!active || !currentKey || effectiveMode !== "natural") return;
@@ -125,7 +141,19 @@ export default function RoomScene({
         audioRef.current = audio;
         audio.playbackRate = rateRef.current;
         audio.ontimeupdate = () => {
-          if (audio.duration) setSentence(sentenceAt(sentences, audio.currentTime / audio.duration));
+          if (!audio.duration) return;
+          const at = sentenceAt(sentences, audio.currentTime / audio.duration);
+          // Someone broke in: the voice stops at the end of the sentence they cut in after.
+          if (at >= spokenCountRef.current) {
+            audio.pause();
+            audio.ontimeupdate = null;
+            if (!cancelled) {
+              setIndex((value) => value + 1);
+              setSentence(0);
+            }
+            return;
+          }
+          setSentence(at);
         };
         audio.onended = () => {
           if (cancelled) return;
@@ -167,7 +195,7 @@ export default function RoomScene({
     let cancelled = false;
     const advance = () => {
       if (cancelled) return;
-      if (sentence + 1 < sentences.length) setSentence(sentence + 1);
+      if (sentence + 1 < spokenCount) setSentence(sentence + 1);
       else {
         setIndex(index + 1);
         setSentence(0);
@@ -208,7 +236,7 @@ export default function RoomScene({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [active, currentKey, sentence, sentences.length, caption, effectiveMode, rate, seatVoices, speakerSeat, index, voices.length]);
+  }, [active, currentKey, sentence, spokenCount, caption, effectiveMode, rate, seatVoices, speakerSeat, index, voices.length]);
 
   useEffect(() => () => synth()?.cancel(), []);
 
@@ -223,6 +251,18 @@ export default function RoomScene({
 
   const speaking = phase === "speaking";
   const shownSpeaker = speaking ? speakerSeat : -1;
+  // Hands go up while the speaker is still talking: listeners decided after hearing this turn.
+  const raisedHands =
+    speaking && current && (sentence >= 1 || spokenCount <= 1) ? (hands?.[current.key] ?? []) : [];
+  const handOf = new Map(raisedHands.map((hand) => [hand.model.id, hand]));
+  const stageLabel = (item: NonNullable<typeof current>) =>
+    item.kind === "interjection"
+      ? "breaking in"
+      : item.kind === "reply"
+        ? "answering"
+        : item.kind === "person"
+          ? "joining in"
+          : item.stage;
   // The blind round, readable as it arrives: live text while writing, finished answers during the pause.
   const blindCards: LiveTurn[] =
     phase === "writing"
@@ -279,6 +319,12 @@ export default function RoomScene({
                 ))}
               </span>
               <span className="seat-name">{seat.label}</span>
+              {handOf.has(seat.id) && (
+                <span className="seat-hand" data-kind={handOf.get(seat.id)!.kind} title={handOf.get(seat.id)!.reason}>
+                  <span aria-hidden="true">{handOf.get(seat.id)!.kind === "break" ? "!" : "✋"}</span>
+                  <small>{handOf.get(seat.id)!.reason}</small>
+                </span>
+              )}
             </div>
           );
         })}
@@ -352,7 +398,7 @@ export default function RoomScene({
               <>
                 <strong style={{ color: current.seat.color }}>
                   {current.speaker}
-                  <small> · {current.stage}</small>
+                  <small> · {stageLabel(current)}</small>
                 </strong>
                 <p>{caption}</p>
               </>
@@ -397,6 +443,8 @@ export default function RoomScene({
               {Math.min(index + (current ? 1 : 0), items.length)} / {items.length} turns
             </span>
           </div>
+
+          {join}
 
           {(notice || (mode === "natural" && naturalError)) && (
             <p className="scene-notice">

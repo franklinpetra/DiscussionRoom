@@ -78,8 +78,10 @@ const PODCAST_STYLE =
   "and carry it somewhere new; hand a real question to someone by name; land one vivid, " +
   "concrete specific (a name, a number, a place, an example); an occasional natural \"Wait,\" " +
   "or \"Huh,\" when it leads somewhere. Never a turn that only agrees (\"Exactly,\" \"That's " +
-  "right\"), and no filler for its own sake. It should sound like people thinking out loud " +
-  "together, never like an essay, a list or a speech.";
+  "right\"), and no filler for its own sake. You are discovering this as you go: when " +
+  "something genuinely surprises or delights you, let it show, the way people do when an " +
+  "idea clicks. It should sound like people thinking out loud together, never like an " +
+  "essay, a list or a speech.";
 
 /**
  * A seat's view of the room: its own blind answer, the unveiling, and everything said aloud.

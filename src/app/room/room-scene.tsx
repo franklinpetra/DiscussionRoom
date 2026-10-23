@@ -13,6 +13,8 @@ import {
   type PlayItem,
 } from "@/lib/room-scene";
 import { requestSpeech, seatVoice, sentenceAt, SPEECH_PRICE_PER_CHARACTER } from "@/lib/speech-audio";
+import NapkinSketch from "@/app/room/napkin-sketch";
+import type { SketchShape } from "@/lib/sketch";
 
 type VoiceMode = "natural" | "browser" | "captions";
 
@@ -51,6 +53,8 @@ type RoomSceneProps = {
   join?: ReactNode;
   /** Called with the characters sent for natural speech, so the cost line can include voices. */
   onSpeech?: (characters: number) => void;
+  /** The artist's napkin sketches, keyed by playlist key. */
+  sketches?: Record<string, { tag: string; attrs: Record<string, string>; text?: string }[]>;
 };
 
 function synth() {
@@ -70,6 +74,7 @@ export default function RoomScene({
   hands,
   join,
   onSpeech,
+  sketches,
 }: RoomSceneProps) {
   const [index, setIndex] = useState(0);
   const [sentence, setSentence] = useState(0);
@@ -291,6 +296,14 @@ export default function RoomScene({
 
   const speaking = phase === "speaking";
   const shownSpeaker = speaking ? speakerSeat : -1;
+  // The most recent sketch for anything spoken so far.
+  const sketchKey = sketches
+    ? items
+        .slice(0, index + 1)
+        .map((item) => item.key)
+        .reverse()
+        .find((key) => sketches[key]?.length)
+    : undefined;
   // Hands go up while the speaker is still talking: listeners decided after hearing this turn.
   // At most two show at once, the way a real table looks: an interruption first, then the
   // earliest hands.
@@ -426,6 +439,15 @@ export default function RoomScene({
                   </article>
                 );
               })}
+            </div>
+          )}
+          {speaking && sketchKey && (
+            // The latest sketch stays on the rug until the artist draws the next one.
+            <div className="rug-sketch" key={sketchKey}>
+              <NapkinSketch
+                drawMs={Math.min(9000, Math.max(2500, readingMilliseconds(items.find((item) => item.key === sketchKey)?.text ?? "", rate) * 0.8))}
+                shapes={sketches![sketchKey] as SketchShape[]}
+              />
             </div>
           )}
           {speaking && current && (

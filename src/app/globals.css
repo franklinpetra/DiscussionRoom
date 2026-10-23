@@ -2732,3 +2732,91 @@ a {
   font-size: 11.5px;
   font-weight: 500;
 }
+
+/* ---- The artist (experiment): napkin sketches drawn on the rug ---- */
+.artist-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.artist-toggle input {
+  margin-top: 3px;
+  accent-color: var(--green);
+}
+
+.artist-toggle small {
+  color: var(--muted);
+}
+
+.rug-sketch {
+  width: min(420px, 62vw);
+  animation: phrase-in 500ms ease;
+}
+
+.napkin-sketch {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* Pen strokes: each draws itself in turn, then stays. */
+.sketch-stroke {
+  fill: none;
+  stroke: #33352f;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  /* Hidden until its turn, so the pen's round tip doesn't leave dots where nothing is drawn yet. */
+  opacity: 0;
+  animation-name: pen-draw;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: forwards;
+}
+
+.sketch-label {
+  fill: #33352f;
+  font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", var(--serif);
+  font-size: 15px;
+  opacity: 0;
+  animation-name: label-in;
+  animation-fill-mode: forwards;
+}
+
+@keyframes pen-draw {
+  from {
+    opacity: 1;
+    stroke-dashoffset: 1;
+  }
+  to {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes label-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sketch-stroke {
+    stroke-dashoffset: 0;
+    opacity: 1;
+    animation: none;
+  }
+
+  .sketch-label {
+    opacity: 1;
+    animation: none;
+  }
+}

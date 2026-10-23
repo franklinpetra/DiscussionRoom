@@ -144,6 +144,8 @@ export type GuestRun = {
   verdicts?: Record<string, { kind: string; reason: string }>;
   /** The model that judged the turns; it had no seat in the room. */
   judge?: GuestModel;
+  /** The artist's napkin sketches, keyed by the turn they draw (see sketch.ts). */
+  sketches?: Record<string, { tag: string; attrs: Record<string, string>; text?: string }[]>;
 };
 
 export type CompletionMessage = {

@@ -67,6 +67,7 @@ import {
   type Verdict,
 } from "@/lib/contributions";
 import { keyUsage } from "@/lib/openrouter-check";
+import { buildSketchPrompt, parseSketch } from "@/lib/sketch";
 import { buildMarkdown } from "@/lib/report";
 import { buildSharpenPrompt, parseSharpened, type Sharpened } from "@/lib/sharpen";
 import { SPEECH_PRICE_PER_CHARACTER } from "@/lib/speech-audio";
@@ -156,6 +157,8 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
   const [voiceCharacters, setVoiceCharacters] = useState(0);
   // "Sharpen my question": the suggestion, and the person's own words to go back to.
   const [sharpening, setSharpening] = useState(false);
+  // Experiment: an artist who sketches each turn as a napkin drawing on the rug.
+  const [artistOn, setArtistOn] = useState(false);
   const [history, setHistory] = useState<History>({ runs: [], models: {} });
   const [sharpened, setSharpened] = useState<(Sharpened & { original: string }) | null>(null);
   // What the key had spent when this discussion began, to read the exact charge afterwards.
@@ -325,7 +328,9 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
       errors: [],
       hands: {},
       listening: { tokens: 0, cost: 0 },
+      ...(artistOn ? { sketches: {} } : {}),
     };
+    const withArtist = artistOn;
     const publish = () =>
       setRun({
         ...currentRun,
@@ -335,6 +340,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
         hands: { ...currentRun.hands },
         listening: { ...currentRun.listening! },
         verdicts: currentRun.verdicts ? { ...currentRun.verdicts } : undefined,
+        sketches: currentRun.sketches ? { ...currentRun.sketches } : undefined,
       });
     publish();
     pendingPersonRef.current = null;
@@ -429,6 +435,36 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
         publish();
       };
       const others = (id?: string) => seats.filter((model) => model.id !== id);
+      // The artist draws one turn at a time; a turn spoken while it's still drawing is skipped,
+      // so the sketches keep pace with the room instead of queuing up behind it.
+      let drawing = false;
+      const sketch = (turn: GuestTurn) => {
+        if (!withArtist || drawing || !turn.id) return;
+        drawing = true;
+        requestCompletion(
+          apiKey,
+          DEFAULT_MODELS[0],
+          buildSketchPrompt(cleanQuestion, conversation.slice(-4, -1), turn),
+          activeController.signal,
+          undefined,
+          PARTING_OPTIONS,
+        )
+          .then((reply) => {
+            currentRun.listening!.tokens += reply.usage?.total_tokens ?? 0;
+            currentRun.listening!.cost += reply.usage?.cost ?? 0;
+            const shapes = parseSketch(reply.text);
+            if (shapes && currentRun.sketches) {
+              currentRun.sketches[turn.id!] = shapes;
+              publish();
+            }
+          })
+          .catch(() => {
+            // A sketch that doesn't arrive is simply not drawn.
+          })
+          .finally(() => {
+            drawing = false;
+          });
+      };
       let breaks = conversation.filter((turn) => turn.kind === "interjection").length;
 
       setConversing(true);
@@ -483,6 +519,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
         taken++;
         record({ ...turn, respondingTo: last ? (last.model.id === PERSON.id ? "you" : modelLabel(last)) : undefined });
         const spoken = conversation.at(-1)!;
+        sketch(spoken);
         const asked = askedSeat(spoken, seats);
         if (asked) addressed = { model: asked, by: spoken.model.nickname ?? spoken.model.label };
 
@@ -784,6 +821,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
         finished={!running}
         hands={run?.hands}
         join={joinForm}
+        sketches={run?.sketches}
         onSpeech={countSpeech}
         items={playlist}
         key={run?.createdAt ?? "idle"}
@@ -890,6 +928,18 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
           )}
 
           <ModelPicker disabled={running} models={models} onChange={setModels} />
+          <label className="artist-toggle">
+            <input
+              checked={artistOn}
+              disabled={running}
+              onChange={(event) => setArtistOn(event.target.checked)}
+              type="checkbox"
+            />
+            <span>
+              <strong>✎ Invite the artist</strong> to sketch the conversation on the rug, napkin style.{" "}
+              <small>Experimental · about a cent per sketch</small>
+            </span>
+          </label>
 
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="guest-actions">

@@ -83,6 +83,8 @@ export default function RoomScene({
   const [naturalError, setNaturalError] = useState("");
   const [notice, setNotice] = useState("");
   const [rate, setRate] = useState(1);
+  // How long the current turn's natural-voice recording lasts, so captions can match it exactly.
+  const [audioSeconds, setAudioSeconds] = useState<{ key: string; seconds: number } | null>(null);
   const [pausing, setPausing] = useState(false);
   const pauseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const rateRef = useRef(rate);
@@ -188,6 +190,9 @@ export default function RoomScene({
       .then((url) => {
         if (cancelled) return;
         const audio = new Audio(url);
+        audio.onloadedmetadata = () => {
+          if (!cancelled && Number.isFinite(audio.duration)) setAudioSeconds({ key: currentKey, seconds: audio.duration });
+        };
         audioRef.current = audio;
         audio.playbackRate = rateRef.current;
         audio.ontimeupdate = () => {
@@ -304,6 +309,14 @@ export default function RoomScene({
         .reverse()
         .find((key) => sketches[key]?.length)
     : undefined;
+  // Each sentence drifts across the rug for as long as it takes to say: the recording's own
+  // length for natural voices (its share of the turn), or an unhurried estimate otherwise.
+  const voiced = effectiveMode === "natural" && audioSeconds?.key === currentKey;
+  const captionMs = Math.round(
+    voiced
+      ? Math.max(1800, ((audioSeconds!.seconds * 1000) / rate) * (caption.length / Math.max(1, currentText.length)))
+      : Math.max(2600, readingMilliseconds(caption, rate) * 1.4),
+  );
   // Hands go up while the speaker is still talking: listeners decided after hearing this turn.
   // At most two show at once, the way a real table looks: an interruption first, then the
   // earliest hands.
@@ -463,7 +476,7 @@ export default function RoomScene({
               key={`${current.key}-${sentence}`}
               style={{
                 // A touch slower than reading pace, so the words never run ahead of the voice.
-                ["--scroll-ms" as string]: `${Math.round(Math.max(2200, readingMilliseconds(caption, rate)) * 1.15)}ms`,
+                ["--scroll-ms" as string]: `${captionMs}ms`,
                 ["--seat-color" as string]: current.seat.color ?? "var(--ink)",
               }}
             >

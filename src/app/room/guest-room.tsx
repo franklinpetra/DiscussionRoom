@@ -703,7 +703,16 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
         <Link className="wordmark" href="/">The Room</Link>
         <nav className="header-nav" aria-label="About this room">
           <InfoDialogs />
-          <KeyControl apiKey={apiKey} models={seated} onChange={setApiKey} ref={keyControlRef} />
+          <KeyControl
+            apiKey={apiKey}
+            models={seated}
+            onChange={(key) => {
+              setApiKey(key);
+              // A "add your key first" message no longer applies once a key is in.
+              if (key.trim()) setError("");
+            }}
+            ref={keyControlRef}
+          />
           <Link className="header-link" href="/login">Sign in</Link>
         </nav>
       </header>

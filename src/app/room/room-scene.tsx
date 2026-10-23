@@ -331,6 +331,7 @@ export default function RoomScene({
           return (
             <div
               className="scene-seat"
+              data-row={position.z < -0.4 ? "back" : "front"}
               data-speaking={isSpeaker}
               data-state={status ?? "idle"}
               key={seat.id}

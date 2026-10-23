@@ -1975,6 +1975,22 @@ a {
   z-index: 30;
 }
 
+/* Back-row chairs sit near the top of the room, where a hand above them would be cut off:
+   their hand rises beside the chair instead. */
+.scene-seat[data-row="back"] .seat-hand {
+  top: 18%;
+  left: 100%;
+  transform: translate(2px, -30%);
+  animation-name: hand-up-side;
+}
+
+@keyframes hand-up-side {
+  from {
+    opacity: 0;
+    transform: translate(2px, 0);
+  }
+}
+
 .seat-hand-img {
   width: auto;
   height: 68px;

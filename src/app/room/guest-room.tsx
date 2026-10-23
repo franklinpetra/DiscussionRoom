@@ -54,6 +54,7 @@ import {
 } from "@/lib/guest-room";
 import { keyUsage } from "@/lib/openrouter-check";
 import { buildMarkdown } from "@/lib/report";
+import { buildSharpenPrompt, parseSharpened, type Sharpened } from "@/lib/sharpen";
 import { SPEECH_PRICE_PER_CHARACTER } from "@/lib/speech-audio";
 import { buildPlaylist, splitSentences } from "@/lib/room-scene";
 
@@ -111,6 +112,9 @@ export default function GuestRoom() {
   const [personQueued, setPersonQueued] = useState(false);
   const pendingPersonRef = useRef<string | null>(null);
   const [voiceCharacters, setVoiceCharacters] = useState(0);
+  // "Sharpen my question": the suggestion, and the person's own words to go back to.
+  const [sharpening, setSharpening] = useState(false);
+  const [sharpened, setSharpened] = useState<(Sharpened & { original: string }) | null>(null);
   // What the key had spent when this discussion began, to read the exact charge afterwards.
   const usageAtStart = useRef<Promise<number | null> | null>(null);
   const [exactCharge, setExactCharge] = useState<string>("");
@@ -255,6 +259,7 @@ export default function GuestRoom() {
 
     const seats = assignNicknames(seated);
     setRunSeats(seats);
+    setSharpened(null);
     setVoiceCharacters(0);
     setExactCharge("");
     usageAtStart.current = keyUsage(apiKey);
@@ -553,6 +558,48 @@ export default function GuestRoom() {
     );
   }
 
+  async function sharpenQuestion() {
+    const original = question.trim();
+    if (!apiKey.trim()) {
+      setError("Add your OpenRouter key first (top right) to sharpen a question.");
+      keyControlRef.current?.open();
+      return;
+    }
+    if (original.length < 5) {
+      setError("Write your question first, then sharpen it.");
+      return;
+    }
+    setError("");
+    setSharpening(true);
+    try {
+      const helper = seated[0] ?? DEFAULT_MODELS[0];
+      const reply = await requestCompletion(
+        apiKey,
+        helper,
+        buildSharpenPrompt(original),
+        new AbortController().signal,
+        undefined,
+        PARTING_OPTIONS,
+      );
+      const result = parseSharpened(reply.text);
+      if (!result) {
+        setError("That one didn't come back clearly. Try sharpening again.");
+        return;
+      }
+      setSharpened({ ...result, original });
+      setQuestion(result.question.slice(0, MAX_QUESTION_LENGTH));
+    } catch (sharpenError) {
+      setError(getErrorMessage(sharpenError));
+    } finally {
+      setSharpening(false);
+    }
+  }
+
+  function revertQuestion() {
+    if (sharpened) setQuestion(sharpened.original);
+    setSharpened(null);
+  }
+
   function joinIn() {
     const text = personDraft.trim();
     if (!text) return;
@@ -692,9 +739,41 @@ export default function GuestRoom() {
                 ref={fileInputRef}
                 type="file"
               />
+              <button
+                className="sharpen-button"
+                disabled={running || sharpening || question.trim().length < 5}
+                onClick={sharpenQuestion}
+                title="Suggest a livelier version of your question"
+                type="button"
+              >
+                {sharpening ? "Sharpening…" : "✦ Sharpen my question"}
+              </button>
               <span className="guest-count">{question.length}/{MAX_QUESTION_LENGTH}</span>
             </div>
           </div>
+          {sharpened && !running && (
+            <div className="sharpen-card" role="status">
+              <p className="sharpen-title">Sharpened. Here&apos;s what changed:</p>
+              <ul>
+                {sharpened.lessons.length ? (
+                  sharpened.lessons.map((lesson) => <li key={lesson}>{lesson}</li>)
+                ) : (
+                  <li>Your question was already strong; it changed very little.</li>
+                )}
+              </ul>
+              <p className="sharpen-original">
+                <small>Yours:</small> {sharpened.original}
+              </p>
+              <div className="sharpen-actions">
+                <button className="pill-button" onClick={revertQuestion} type="button">
+                  Back to mine
+                </button>
+                <button className="quiet-link" onClick={() => setSharpened(null)} type="button">
+                  Keep this one
+                </button>
+              </div>
+            </div>
+          )}
           {!!attachments.length && (
             <p className="guest-help">
               Files are read here in your browser. Each seated model reads them in every turn, so

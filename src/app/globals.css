@@ -2123,3 +2123,73 @@ a {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* "Sharpen my question": a quiet button beside +, and a small lesson after. */
+.sharpen-button {
+  min-height: 30px;
+  margin: 0 auto 0 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--green-dark);
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.sharpen-button:hover:not(:disabled) {
+  border-color: var(--green);
+}
+
+.sharpen-button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.sharpen-button:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.sharpen-card {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--green);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.sharpen-title {
+  margin: 0;
+  color: var(--green-dark);
+  font-weight: 650;
+}
+
+.sharpen-card ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.sharpen-original {
+  margin: 0;
+  color: var(--muted);
+}
+
+.sharpen-original small {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.sharpen-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

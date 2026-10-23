@@ -212,3 +212,27 @@ describe("nicknames", () => {
     expect(lastContent(thread)).toContain("At this table you go by Ali, and the others by Bob, Carol");
   });
 });
+
+describe("sharpen my question", () => {
+  it("asks to keep the person's meaning and voice, and to teach what changed", async () => {
+    const { buildSharpenPrompt } = await import("@/lib/sharpen");
+    const prompt = buildSharpenPrompt("What is the purpose of story?");
+    expect(prompt[0].content).toMatch(/Keep their meaning, their subject, their voice/);
+    expect(prompt[0].content).toMatch(/never add facts/);
+    expect(prompt[0].content).toContain("LESSON:");
+    expect(prompt[1].content).toBe("What is the purpose of story?");
+  });
+
+  it("reads the suggestion and up to two lessons, and refuses a malformed reply", async () => {
+    const { parseSharpened } = await import("@/lib/sharpen");
+    expect(
+      parseSharpened(
+        '**QUESTION:** "Why do we spend so much time on stories that aren\'t true?"\nLESSON: Added a puzzle to chase.\nLESSON: Made it open.\nLESSON: extra',
+      ),
+    ).toEqual({
+      question: "Why do we spend so much time on stories that aren't true?",
+      lessons: ["Added a puzzle to chase.", "Made it open."],
+    });
+    expect(parseSharpened("Sure! Here's a better question.")).toBeNull();
+  });
+});

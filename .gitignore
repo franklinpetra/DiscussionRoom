@@ -45,3 +45,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 /public/pdf.worker.min.mjs
+
+# Petra's original artwork; the app uses the small copies in public/
+/Graphics - */

@@ -1996,11 +1996,6 @@ a {
   }
 }
 
-/* Hands on the left side of the room are mirrored so they face in. */
-.seat-hand-img[data-mirror="true"] {
-  scale: -1 1;
-}
-
 @keyframes hand-sway {
   50% {
     transform: rotate(-5deg);

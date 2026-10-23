@@ -20,6 +20,13 @@ type VoiceMode = "natural" | "browser" | "captions";
 export type ScenePhase = "idle" | "writing" | "interlude" | "speaking";
 
 const ANGLES = [0, 45, 90, 135, 180, 225, 270, 315];
+// Petra's hands: every chair gets its own. Three-quarter and tilted views face in from the
+// right side of the room; palms forward sit on the left. Pointing fingers are for breaking in.
+const RIGHT_HANDS = ["f-three-quarter-right", "m-three-quarter-right", "f-palm-slight-tilt", "m-palm-tilt"];
+const LEFT_HANDS = ["f-palm-forward", "m-palm-forward", "m-palm-curved", "f-palm-tilt"];
+const POINTING_HANDS = ["f-point", "m-point"];
+const handSrc = (name: string) => `/hands/set/${name}.webp`;
+
 /** A breath between speakers, the way a real table pauses before the next voice. */
 const PAUSE_BETWEEN_SPEAKERS_MS = 1000;
 const RATES = [0.8, 1, 1.25, 1.5, 2];
@@ -77,6 +84,15 @@ export default function RoomScene({
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => synth()?.getVoices() ?? []);
 
   const positions = useMemo(() => seatPositions(seats.length), [seats.length]);
+  // Each seat's own raised hand and pointing hand, so no two chairs share a raised hand.
+  const seatHands = useMemo(() => {
+    let left = 0;
+    let right = 0;
+    return positions.map((position, i) => ({
+      raise: position.x > 0 ? RIGHT_HANDS[right++ % RIGHT_HANDS.length] : LEFT_HANDS[left++ % LEFT_HANDS.length],
+      point: POINTING_HANDS[i % POINTING_HANDS.length],
+    }));
+  }, [positions]);
   const seatIndex = useMemo(() => new Map(seats.map((seat, i) => [seat.id, i])), [seats]);
   const seatVoices = useMemo(() => pickVoices(voices, seats.length), [voices, seats.length]);
   const current = items[index] ?? null;
@@ -118,7 +134,7 @@ export default function RoomScene({
     for (const seat of seats) {
       for (const angle of ANGLES) new Image().src = `/chairs/chair-${seat.chair ?? "a"}-${angle}.webp`;
     }
-    for (const hand of ["hand-raised-back", "hand-break"]) new Image().src = `/hands/${hand}.png`;
+    for (const hand of [...RIGHT_HANDS, ...LEFT_HANDS, ...POINTING_HANDS]) new Image().src = handSrc(hand);
   }, [seats]);
 
   const getAudio = useCallback(
@@ -340,14 +356,13 @@ export default function RoomScene({
               <span className="seat-name" title={seat.label}>{seat.nickname ?? seat.label}</span>
               {handOf.has(seat.id) && (
                 <span className="seat-hand" data-kind={handOf.get(seat.id)!.kind} title={handOf.get(seat.id)!.reason}>
-                  {/* Petra's watercolor hands: a finger for breaking in, a raised hand that faces into the room. */}
+                  {/* Petra's hands: this seat's own raised hand, or its pointing finger for breaking in. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     alt={handOf.get(seat.id)!.kind === "break" ? "Breaking in" : "Hand raised"}
                     className="seat-hand-img"
-                    data-mirror={position.x < 0}
                     draggable={false}
-                    src={handOf.get(seat.id)!.kind === "break" ? "/hands/hand-break.png" : "/hands/hand-raised-back.png"}
+                    src={handSrc(handOf.get(seat.id)!.kind === "break" ? seatHands[i].point : seatHands[i].raise)}
                   />
                   <small>{handOf.get(seat.id)!.reason}</small>
                 </span>

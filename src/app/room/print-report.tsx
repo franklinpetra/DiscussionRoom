@@ -1,3 +1,7 @@
+"use client";
+
+import { useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { modelLabel, type GuestRun, type GuestTurn } from "@/lib/guest-room";
 import { reportDate, reportId } from "@/lib/report";
 
@@ -5,9 +9,17 @@ function color(turn: GuestTurn) {
   return (turn.servedModel ?? turn.model).color ?? "#555";
 }
 
-/** Rendered only when printing; the browser's "Save as PDF" produces the shareable report. */
+const noop = () => () => {};
+
+/**
+ * Rendered only when printing; the browser's "Save as PDF" produces the shareable report.
+ * It lives directly under <body> so printing can hide the page and let the report flow
+ * across as many pages as it needs.
+ */
 export default function PrintReport({ run }: { run: GuestRun }) {
-  return (
+  const mounted = useSyncExternalStore(noop, () => true, () => false);
+  if (!mounted) return null;
+  return createPortal(
     <article className="print-report" aria-hidden="true">
       <header>
         <p className="print-kicker">The Room · {reportDate(run.createdAt)}</p>
@@ -45,9 +57,12 @@ export default function PrintReport({ run }: { run: GuestRun }) {
           {run.rounds.map((round, index) => (
             <div key={`${round.name}-${index}`}>
               <h3>{round.name}</h3>
-              {round.turns.map((turn) => (
-                <div className="print-turn" key={turn.model.id} style={{ borderColor: color(turn) }}>
-                  <strong style={{ color: color(turn) }}>{modelLabel(turn)}</strong>
+              {round.turns.map((turn, turnIndex) => (
+                <div className="print-turn" key={turn.id ?? `${turn.model.id}-${turnIndex}`} style={{ borderColor: color(turn) }}>
+                  <strong style={{ color: color(turn) }}>
+                    {modelLabel(turn)}
+                    {turn.kind === "interjection" ? " (breaks in)" : turn.kind === "person" ? " (joins in)" : ""}
+                  </strong>
                   <p>{turn.text}</p>
                 </div>
               ))}
@@ -56,6 +71,7 @@ export default function PrintReport({ run }: { run: GuestRun }) {
         </div>
       </section>
       <footer className="print-footer">{reportId(run.createdAt)} · thediscussion.app</footer>
-    </article>
+    </article>,
+    document.body,
   );
 }

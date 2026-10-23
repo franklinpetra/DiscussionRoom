@@ -37,6 +37,8 @@ type RoomSceneProps = {
   hands?: Record<string, Hand[]>;
   /** The "Join in" box, shown under the controls while the room is talking. */
   join?: ReactNode;
+  /** Called with the characters sent for natural speech, so the cost line can include voices. */
+  onSpeech?: (characters: number) => void;
 };
 
 function synth() {
@@ -55,6 +57,7 @@ export default function RoomScene({
   stageRef,
   hands,
   join,
+  onSpeech,
 }: RoomSceneProps) {
   const [index, setIndex] = useState(0);
   const [sentence, setSentence] = useState(0);
@@ -104,13 +107,14 @@ export default function RoomScene({
     (key: string, text: string, seat: number) => {
       let pending = audioCache.current.get(key);
       if (!pending) {
+        onSpeech?.(text.length);
         pending = requestSpeech(apiKey, text, seatVoice(seat)).then((blob) => URL.createObjectURL(blob));
         audioCache.current.set(key, pending);
         pending.catch(() => audioCache.current.delete(key));
       }
       return pending;
     },
-    [apiKey],
+    [apiKey, onSpeech],
   );
 
   useEffect(() => {

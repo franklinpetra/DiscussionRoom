@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import InfoDialogs from "@/app/room/info-dialogs";
 import KeyControl, { type KeyControlHandle } from "@/app/room/key-control";
 import ModelPicker, { type ModelChoice } from "@/app/room/model-picker";
@@ -52,6 +52,7 @@ import {
   type LiveTurn,
 } from "@/lib/guest-room";
 import { buildMarkdown } from "@/lib/report";
+import { SPEECH_PRICE_PER_CHARACTER } from "@/lib/speech-audio";
 import { buildPlaylist, splitSentences } from "@/lib/room-scene";
 
 const CONVERSATION = "The conversation";
@@ -107,6 +108,8 @@ export default function GuestRoom() {
   const [personDraft, setPersonDraft] = useState("");
   const [personQueued, setPersonQueued] = useState(false);
   const pendingPersonRef = useRef<string | null>(null);
+  const [voiceCharacters, setVoiceCharacters] = useState(0);
+  const countSpeech = useCallback((characters: number) => setVoiceCharacters((total) => total + characters), []);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const keyControlRef = useRef<KeyControlHandle>(null);
@@ -245,6 +248,7 @@ export default function GuestRoom() {
     }
 
     setRunSeats(seated);
+    setVoiceCharacters(0);
     setPhase("writing");
     const activeController = new AbortController();
     const startedAt = performance.now();
@@ -604,6 +608,7 @@ export default function GuestRoom() {
         finished={!running}
         hands={run?.hands}
         join={joinForm}
+        onSpeech={countSpeech}
         items={playlist}
         key={run?.createdAt ?? "idle"}
         live={liveStage?.turns ?? (liveSynthesis ? [liveSynthesis] : [])}
@@ -788,9 +793,13 @@ export default function GuestRoom() {
           {!running && (
             <>
               <p className="guest-usage">
-                {allTurns.length} answers · {totalTokens.toLocaleString()} tokens reported
-                {totalCost > 0 ? ` · about $${totalCost.toFixed(3)}` : ""}
-                {elapsed !== null ? ` · ${elapsed}s` : ""}. Not every provider reports cost.
+                {allTurns.length} turns · {totalTokens.toLocaleString()} tokens
+                {totalCost > 0 ? ` · about $${totalCost.toFixed(3)} for the models` : ""}
+                {voiceCharacters > 0
+                  ? ` · about $${(voiceCharacters * SPEECH_PRICE_PER_CHARACTER).toFixed(3)} for natural voices`
+                  : ""}
+                {elapsed !== null ? ` · written in ${elapsed}s` : ""}. Some providers don&apos;t report cost,
+                so your OpenRouter activity page has the exact total.
               </p>
               <div className="guest-actions">
                 <button className="button" onClick={() => window.print()} type="button">

@@ -171,6 +171,32 @@ describe("OpenRouter guest request", () => {
     ]);
   });
 
+  it("reads list-style and null content without leaking thinking or crashing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          [
+            'data: {"choices":[{"delta":{"role":"assistant","content":null,"reasoning":"private"}}]}',
+            'data: {"choices":[{"delta":{"content":[{"type":"thinking","thinking":[{"type":"text","text":"hmm"}]}]}}]}',
+            'data: {"choices":[{"delta":{"content":[{"type":"text","text":"Seen "},{"type":"text","text":"words."}]}}]}',
+            'data: {"choices":[{"delta":{"content":{"unexpected":true}}}]}',
+            'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+            "data: [DONE]",
+            "",
+          ].join("\n"),
+          { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        ),
+      ),
+    );
+    const deltas: string[] = [];
+    const result = await requestCompletion("k", alice, buildIndependentPrompt("Q"), new AbortController().signal, (delta) =>
+      deltas.push(delta),
+    );
+    expect(result.text).toBe("Seen words.");
+    expect(deltas).toEqual(["Seen words."]);
+  });
+
   it("streams the supplied key and answer directly to OpenRouter", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

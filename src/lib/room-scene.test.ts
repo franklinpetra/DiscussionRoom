@@ -3,6 +3,7 @@ import type { GuestModel, GuestRun } from "@/lib/guest-room";
 import {
   attentionPoint,
   buildPlaylist,
+  captionMilliseconds,
   CENTER,
   facingAngle,
   pickVoices,
@@ -97,5 +98,22 @@ describe("natural voices and key checks", async () => {
     expect(adviceFor(404, "No endpoints found matching your data policy")).toContain("Privacy");
     expect(adviceFor(403, "Blocked by guardrail")).toContain("Guardrails");
     expect(adviceFor(429, "Rate limit exceeded")).toContain("Rate limited");
+  });
+});
+
+describe("caption timing", () => {
+  it("uses a reading estimate before anyone has spoken, instead of crashing", () => {
+    // The room's opening moment: no current turn and no recording yet (this took the page down).
+    expect(captionMilliseconds("", "", 1, null, undefined)).toBe(2600);
+  });
+
+  it("follows the recording's length once this turn's voice has loaded", () => {
+    const text = "One. Two.";
+    expect(captionMilliseconds("One.", text, 1, { key: "t1", seconds: 10 }, "t1")).toBe(4444);
+  });
+
+  it("ignores a recording that belongs to another turn", () => {
+    const estimate = captionMilliseconds("One.", "One. Two.", 1, null, "t2");
+    expect(captionMilliseconds("One.", "One. Two.", 1, { key: "t1", seconds: 10 }, "t2")).toBe(estimate);
   });
 });

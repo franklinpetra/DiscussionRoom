@@ -367,6 +367,23 @@ export type CompletionOptions = {
 export const TURN_OPTIONS: CompletionOptions = { effort: "medium" };
 export const PARTING_OPTIONS: CompletionOptions = { effort: "low" };
 
+/**
+ * The visible words in one streamed chunk. Most models send a string; some (Mistral's reasoning
+ * models) send a list of parts, where only "text" parts are spoken and "thinking" stays private.
+ */
+export function deltaText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) =>
+      part && typeof part === "object" && (part as { type?: unknown }).type === "text" &&
+      typeof (part as { text?: unknown }).text === "string"
+        ? (part as { text: string }).text
+        : "",
+    )
+    .join("");
+}
+
 export async function requestCompletion(
   apiKey: string,
   model: GuestModel,
@@ -426,7 +443,7 @@ export async function requestCompletion(
     }
     let payload: CompletionResponse & {
       choices?: Array<{
-        delta?: { content?: string | null };
+        delta?: { content?: unknown };
         finish_reason?: string | null;
       }>;
       model?: string;
@@ -441,9 +458,10 @@ export async function requestCompletion(
       return;
     }
     const choice = payload.choices?.[0];
-    if (choice?.delta?.content) {
-      text += choice.delta.content;
-      onDelta?.(choice.delta.content);
+    const delta = deltaText(choice?.delta?.content);
+    if (delta) {
+      text += delta;
+      onDelta?.(delta);
     }
     if (choice?.finish_reason) finishReason = choice.finish_reason;
     if (payload.usage) usage = payload.usage;

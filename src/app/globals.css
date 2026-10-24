@@ -1288,6 +1288,20 @@ a {
   gap: 14px;
 }
 
+/* When the scene itself fails: a short note, with the question box still usable. */
+.room-fallback {
+  justify-items: center;
+  padding: 32px 16px;
+}
+
+.room-fallback .stage-message {
+  justify-items: start;
+}
+
+.room-fallback .guest-composer {
+  width: min(100%, 720px);
+}
+
 .room-title {
   /* Lines up with the writing space's left edge (the stage's side padding). */
   margin: clamp(26px, 5vw, 48px) 0 18px;

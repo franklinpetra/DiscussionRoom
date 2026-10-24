@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type
 import { parseTurnMarkers, PERSON, type GuestModel, type Hand, type LiveTurn } from "@/lib/guest-room";
 import {
   attentionPoint,
+  captionMilliseconds,
   facingAngle,
   pickVoices,
   readingMilliseconds,
@@ -311,12 +312,7 @@ export default function RoomScene({
     : undefined;
   // Each sentence drifts across the rug for as long as it takes to say: the recording's own
   // length for natural voices (its share of the turn), or an unhurried estimate otherwise.
-  const voiced = effectiveMode === "natural" && audioSeconds?.key === currentKey;
-  const captionMs = Math.round(
-    voiced
-      ? Math.max(1800, ((audioSeconds!.seconds * 1000) / rate) * (caption.length / Math.max(1, currentText.length)))
-      : Math.max(2600, readingMilliseconds(caption, rate) * 1.4),
-  );
+  const captionMs = captionMilliseconds(caption, currentText, rate, effectiveMode === "natural" ? audioSeconds : null, currentKey);
   // Hands go up while the speaker is still talking: listeners decided after hearing this turn.
   // At most two show at once, the way a real table looks: an interruption first, then the
   // earliest hands.

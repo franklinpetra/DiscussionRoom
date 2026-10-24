@@ -96,6 +96,24 @@ export function readingMilliseconds(text: string, rate: number) {
   return Math.round(((words / 2.7) * 1000) / rate + 500);
 }
 
+/**
+ * How long a caption drifts across the rug: its share of the recording when this turn's natural
+ * voice has loaded, otherwise an unhurried reading estimate. Before anyone speaks there is no
+ * turn and no recording, which must fall back to the estimate rather than fail.
+ */
+export function captionMilliseconds(
+  caption: string,
+  turnText: string,
+  rate: number,
+  recording: { key: string; seconds: number } | null,
+  turnKey: string | undefined,
+) {
+  if (turnKey && recording?.key === turnKey) {
+    return Math.round(Math.max(1800, ((recording.seconds * 1000) / rate) * (caption.length / Math.max(1, turnText.length))));
+  }
+  return Math.round(Math.max(2600, readingMilliseconds(caption, rate) * 1.4));
+}
+
 const NOVELTY_VOICES =
   /albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|junior|ralph|fred|kathy|grandma|grandpa|rocko|shelley|sandy|flo|eddy|reed/i;
 

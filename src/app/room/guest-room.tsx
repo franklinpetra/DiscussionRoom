@@ -8,6 +8,7 @@ import ModelPicker, { type ModelChoice } from "@/app/room/model-picker";
 import ContributionMap from "@/app/room/contribution-map";
 import PrintReport from "@/app/room/print-report";
 import RoomScene, { type ScenePhase } from "@/app/room/room-scene";
+import SceneGuard from "@/app/room/scene-guard";
 import {
   ACCEPTED_FILES,
   addAttachment,
@@ -757,6 +758,114 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
               </form>
   ) : null;
 
+  const composer = (
+    <div className="guest-composer">
+      <div className="composer-box">
+        <textarea
+          aria-label="Your question"
+          maxLength={MAX_QUESTION_LENGTH}
+          onChange={(event) => setQuestion(event.target.value)}
+          placeholder="A question, a decision, a draft, a problem worth more than one opinion…"
+          rows={4}
+          value={question}
+        />
+        {(!!attachments.length || !!reading.length) && (
+          <ul className="attachment-list" aria-label="Attached files">
+            {attachments.map((item) => (
+              <li key={item.name}>
+                <span>{item.name}</span>
+                <small>
+                  ~{estimateTokens(item.text.length).toLocaleString()} tokens
+                  {item.truncated ? " · trimmed to fit" : ""}
+                </small>
+                <button
+                  aria-label={`Remove ${item.name}`}
+                  disabled={running}
+                  onClick={() => setAttachments((current) => current.filter((other) => other !== item))}
+                  type="button"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+            {reading.map((name) => (
+              <li key={`reading-${name}`} data-reading="true"><span>Reading {name}…</span></li>
+            ))}
+          </ul>
+        )}
+        <div className="composer-bar">
+          <button
+            aria-label="Attach documents or files"
+            className="composer-plus"
+            disabled={running || attachedChars >= MAX_ATTACHMENT_CHARS}
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach documents (PDF, Word, text, code)"
+            type="button"
+          >
+            +
+          </button>
+          <input
+            accept={ACCEPTED_FILES}
+            hidden
+            multiple
+            onChange={(event) => attachFiles(event.target.files)}
+            ref={fileInputRef}
+            type="file"
+          />
+          <button
+            className="sharpen-button"
+            disabled={running || sharpening || question.trim().length < 5}
+            onClick={sharpenQuestion}
+            title="Suggest a livelier version of your question"
+            type="button"
+          >
+            {sharpening ? "Sharpening…" : "✦ Sharpen my question"}
+          </button>
+          <span className="guest-count">{question.length}/{MAX_QUESTION_LENGTH}</span>
+        </div>
+      </div>
+      {sharpened && !running && (
+        <div className="sharpen-card" role="status">
+          <p className="sharpen-title">Sharpened. Here&apos;s what changed:</p>
+          <ul>
+            {sharpened.lessons.length ? (
+              sharpened.lessons.map((lesson) => <li key={lesson}>{lesson}</li>)
+            ) : (
+              <li>Your question was already strong; it changed very little.</li>
+            )}
+          </ul>
+          <p className="sharpen-original">
+            <small>Yours:</small> {sharpened.original}
+          </p>
+          <div className="sharpen-actions">
+            <button className="pill-button" onClick={revertQuestion} type="button">
+              Back to mine
+            </button>
+            <button className="quiet-link" onClick={() => setSharpened(null)} type="button">
+              Keep this one
+            </button>
+          </div>
+        </div>
+      )}
+      {!!attachments.length && (
+        <p className="guest-help">
+          Files are read here in your browser. Each seated model reads them in every turn, so
+          about {(estimateTokens(attachedChars) * seated.length * 3).toLocaleString()} extra
+          input tokens for this run.
+        </p>
+      )}
+
+      <ModelPicker disabled={running} models={models} onChange={setModels} />
+
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="guest-actions">
+        <button className="button" disabled={running} onClick={startRun} type="button">
+          Ask the room
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <header className="masthead room-masthead">
@@ -779,126 +888,24 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
 
       <h1 className="room-title">What shall we discuss?</h1>
 
-      <RoomScene
-        apiKey={apiKey}
-        finished={!running}
-        hands={run?.hands}
-        join={joinForm}
-        onSpeech={countSpeech}
-        items={playlist}
-        key={run?.createdAt ?? "idle"}
-        live={liveStage?.turns ?? (liveSynthesis ? [liveSynthesis] : [])}
-        phase={phase}
-        question={run?.question}
-        seats={run ? runSeats : seatedNames}
-        stageRef={stageRef}
-      >
-        <div className="guest-composer">
-          <div className="composer-box">
-            <textarea
-              aria-label="Your question"
-              maxLength={MAX_QUESTION_LENGTH}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder="A question, a decision, a draft, a problem worth more than one opinion…"
-              rows={4}
-              value={question}
-            />
-            {(!!attachments.length || !!reading.length) && (
-              <ul className="attachment-list" aria-label="Attached files">
-                {attachments.map((item) => (
-                  <li key={item.name}>
-                    <span>{item.name}</span>
-                    <small>
-                      ~{estimateTokens(item.text.length).toLocaleString()} tokens
-                      {item.truncated ? " · trimmed to fit" : ""}
-                    </small>
-                    <button
-                      aria-label={`Remove ${item.name}`}
-                      disabled={running}
-                      onClick={() => setAttachments((current) => current.filter((other) => other !== item))}
-                      type="button"
-                    >
-                      ×
-                    </button>
-                  </li>
-                ))}
-                {reading.map((name) => (
-                  <li key={`reading-${name}`} data-reading="true"><span>Reading {name}…</span></li>
-                ))}
-              </ul>
-            )}
-            <div className="composer-bar">
-              <button
-                aria-label="Attach documents or files"
-                className="composer-plus"
-                disabled={running || attachedChars >= MAX_ATTACHMENT_CHARS}
-                onClick={() => fileInputRef.current?.click()}
-                title="Attach documents (PDF, Word, text, code)"
-                type="button"
-              >
-                +
-              </button>
-              <input
-                accept={ACCEPTED_FILES}
-                hidden
-                multiple
-                onChange={(event) => attachFiles(event.target.files)}
-                ref={fileInputRef}
-                type="file"
-              />
-              <button
-                className="sharpen-button"
-                disabled={running || sharpening || question.trim().length < 5}
-                onClick={sharpenQuestion}
-                title="Suggest a livelier version of your question"
-                type="button"
-              >
-                {sharpening ? "Sharpening…" : "✦ Sharpen my question"}
-              </button>
-              <span className="guest-count">{question.length}/{MAX_QUESTION_LENGTH}</span>
-            </div>
-          </div>
-          {sharpened && !running && (
-            <div className="sharpen-card" role="status">
-              <p className="sharpen-title">Sharpened. Here&apos;s what changed:</p>
-              <ul>
-                {sharpened.lessons.length ? (
-                  sharpened.lessons.map((lesson) => <li key={lesson}>{lesson}</li>)
-                ) : (
-                  <li>Your question was already strong; it changed very little.</li>
-                )}
-              </ul>
-              <p className="sharpen-original">
-                <small>Yours:</small> {sharpened.original}
-              </p>
-              <div className="sharpen-actions">
-                <button className="pill-button" onClick={revertQuestion} type="button">
-                  Back to mine
-                </button>
-                <button className="quiet-link" onClick={() => setSharpened(null)} type="button">
-                  Keep this one
-                </button>
-              </div>
-            </div>
-          )}
-          {!!attachments.length && (
-            <p className="guest-help">
-              Files are read here in your browser. Each seated model reads them in every turn, so
-              about {(estimateTokens(attachedChars) * seated.length * 3).toLocaleString()} extra
-              input tokens for this run.
-            </p>
-          )}
-
-          <ModelPicker disabled={running} models={models} onChange={setModels} />
-
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <div className="guest-actions">
-            <button className="button" disabled={running} onClick={startRun} type="button">
-              Ask the room
-            </button>
-          </div>
-        </div>
-      </RoomScene>
+      <SceneGuard composer={composer} key={run?.createdAt ?? "idle"}>
+        <RoomScene
+          apiKey={apiKey}
+          finished={!running}
+          hands={run?.hands}
+          join={joinForm}
+          onSpeech={countSpeech}
+          items={playlist}
+          key={run?.createdAt ?? "idle"}
+          live={liveStage?.turns ?? (liveSynthesis ? [liveSynthesis] : [])}
+          phase={phase}
+          question={run?.question}
+          seats={run ? runSeats : seatedNames}
+          stageRef={stageRef}
+        >
+          {composer}
+        </RoomScene>
+      </SceneGuard>
 
       {run && !stageVisible && (
         <button

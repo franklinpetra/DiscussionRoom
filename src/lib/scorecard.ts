@@ -83,13 +83,17 @@ export function anonymizer(seats: GuestModel[]) {
       text,
     );
   const who = (turn: GuestTurn) =>
-    turn.model.id === PERSON.id ? speakerName(turn) : (voices.get(turn.model.id) ?? "Another voice");
+    turn.model.id === PERSON.id
+      ? speakerName(turn)
+      : turn.kind === "quip"
+        ? "The room's one-line summary"
+        : (voices.get(turn.model.id) ?? "Another voice");
   return { hide, who };
 }
 
 /** The turns the judge can credit: everything the models said aloud. */
 export function creditableTurns(conversation: GuestTurn[]) {
-  return conversation.filter((turn) => turn.model.id !== PERSON.id && turn.id);
+  return conversation.filter((turn) => turn.model.id !== PERSON.id && turn.kind !== "quip" && turn.id);
 }
 
 export type JudgeInput = {

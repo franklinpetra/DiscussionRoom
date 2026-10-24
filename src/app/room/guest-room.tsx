@@ -33,13 +33,16 @@ import {
 } from "@/lib/floor";
 import {
   assignNicknames,
+  buildChasePrompt,
   buildIndependentPrompt,
   buildSynthesisPrompt,
+  CHASE,
   DEFAULT_MODELS,
   isPass,
   MAX_QUESTION_LENGTH,
   MIN_MODELS,
   modelLabel,
+  parseChase,
   parseTurnMarkers,
   PERSON,
   pickSynthesizer,
@@ -67,7 +70,7 @@ import {
   type TapId,
 } from "@/lib/scorecard";
 import { keyUsage } from "@/lib/openrouter-check";
-import { buildMarkdown } from "@/lib/report";
+import { buildMarkdown, sourceHref, sourceLabel } from "@/lib/report";
 import { buildSharpenPrompt, parseSharpened, type Sharpened } from "@/lib/sharpen";
 import { SPEECH_PRICE_PER_CHARACTER } from "@/lib/speech-audio";
 import { buildPlaylist, splitSentences } from "@/lib/room-scene";
@@ -117,8 +120,8 @@ function Sources({ sources }: { sources: string[] }) {
       {sources.map((address, index) => (
         <span key={address}>
           {index > 0 && " · "}
-          <a href={/^https?:/i.test(address) ? address : `https://${address}`} rel="noreferrer" target="_blank">
-            {address.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "")}
+          <a href={sourceHref(address)} rel="noreferrer" target="_blank">
+            {sourceLabel(address)}
           </a>
         </span>
       ))}
@@ -551,6 +554,37 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
       writeRotation(rotation + 1);
       const canTalk = independent.turns.length >= MIN_MODELS;
       if (canTalk) {
+        // Chase cuts to the chase in one line, so the conversation starts from what most needs saying.
+        setStatus("Chase is cutting to the chase…");
+        const quip = await requestCompletion(
+          apiKey,
+          CHASE,
+          buildChasePrompt(cleanQuestion, independent.turns),
+          activeController.signal,
+          undefined,
+          PARTING_OPTIONS,
+        ).catch(() => null);
+        if (stopped()) return;
+        const said = quip ? parseChase(quip.text) : null;
+        if (quip && said) {
+          currentRun.listening!.tokens += quip.usage?.total_tokens ?? 0;
+          currentRun.listening!.cost += quip.usage?.cost ?? 0;
+          currentRun.rounds.push({
+            name: CONVERSATION,
+            turns: [
+              {
+                model: CHASE,
+                text: said.line,
+                ...(said.brief ? { brief: said.brief } : {}),
+                latency: quip.latency,
+                usage: null,
+                kind: "quip",
+                id: `chase-${Date.now().toString(36)}`,
+              },
+            ],
+          });
+          publish();
+        }
         await floor(MAX_FLOOR_TURNS, rotation);
         if (stopped()) return;
       }
@@ -990,6 +1024,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
                         {turn.kind === "interjection" && <small> breaks in on {turn.respondingTo}</small>}
                         {turn.kind === "reply" && <small> answers {turn.respondingTo}</small>}
                         {turn.kind === "person" && <small> joins in</small>}
+                        {turn.kind === "quip" && <small> cuts to the chase</small>}
                       </strong>
                       {turn.id && discoveryAt.get(turn.id) && <DiscoveryChip point={discoveryAt.get(turn.id)!} />}
                       {turn.kind !== "person" && <span>{turn.latency}s</span>}
@@ -1004,6 +1039,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
                     ) : (
                       <p>{turn.text}</p>
                     )}
+                    {turn.brief && <p className="turn-brief">For the room: {turn.brief}</p>}
                     {!!turn.sources?.length && <Sources sources={turn.sources} />}
                   </article>
                 );

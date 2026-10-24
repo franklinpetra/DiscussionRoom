@@ -52,7 +52,8 @@ function conversationBlock(conversation: GuestTurn[], self: GuestModel) {
       const who = turn.model.id === self.id ? "You" : speakerName(turn);
       const tag =
         turn.kind === "interjection" ? " (breaking in)" : turn.kind === "person" ? " (joining in)" : "";
-      return `${who}${tag}: ${spokenText(turn)}`;
+      const brief = turn.kind === "quip" && turn.brief ? `\n(What the room most needs to settle: ${turn.brief})` : "";
+      return `${who}${tag}: ${spokenText(turn)}${brief}`;
     })
     .join("\n\n");
 }

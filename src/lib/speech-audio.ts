@@ -3,8 +3,10 @@ export const SPEECH_API = "https://openrouter.ai/api/v1/audio/speech";
 export const SPEECH_MODEL = "microsoft/mai-voice-2.1-flash";
 export const SPEECH_PRICE_PER_CHARACTER = 0.000015;
 
-// The first voice is Australian (fun for an American ear); the rest are American, each distinct.
-const VOICES = ["en-AU-Isla", "en-US-Harper", "en-US-Jasper", "en-US-Olivia", "en-US-Grant", "en-US-Iris", "en-US-Sage"];
+// Chase, the room's one-liner, has the only Australian voice (fun for an American ear); the
+// seats are American, each distinct.
+export const CHASE_VOICE = "en-AU-Isla";
+const VOICES = ["en-US-Harper", "en-US-Jasper", "en-US-Olivia", "en-US-Grant", "en-US-Iris", "en-US-Sage"];
 
 /** A distinct natural voice for each seat. */
 export function seatVoice(index: number) {

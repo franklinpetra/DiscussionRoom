@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { parseTurnMarkers, PERSON, type GuestModel, type Hand, type LiveTurn } from "@/lib/guest-room";
+import { CHASE, parseTurnMarkers, PERSON, type GuestModel, type Hand, type LiveTurn } from "@/lib/guest-room";
 import {
+  accentVoice,
   attentionPoint,
   captionMilliseconds,
   facingAngle,
@@ -13,7 +14,7 @@ import {
   splitSentences,
   type PlayItem,
 } from "@/lib/room-scene";
-import { requestSpeech, seatVoice, sentenceAt, SPEECH_PRICE_PER_CHARACTER } from "@/lib/speech-audio";
+import { CHASE_VOICE, requestSpeech, seatVoice, sentenceAt, SPEECH_PRICE_PER_CHARACTER } from "@/lib/speech-audio";
 
 type VoiceMode = "natural" | "browser" | "captions";
 
@@ -34,6 +35,8 @@ const PAUSE_BETWEEN_SPEAKERS_MS = 1000;
 const SLIDE_IN_MS = 150;
 const slidesIn = (text?: string) => /^\s*(…|\.\.\.|—)/.test(text ?? "");
 const RATES = [0.8, 1, 1.25, 1.5, 2];
+/** About four lines of the question in the corner of the room; longer ones get "More…". */
+const QUESTION_PEEK = 160;
 
 type RoomSceneProps = {
   apiKey: string;
@@ -82,6 +85,8 @@ export default function RoomScene({
   // How long the current turn's natural-voice recording lasts, so captions can match it exactly.
   const [audioSeconds, setAudioSeconds] = useState<{ key: string; seconds: number } | null>(null);
   const [pausing, setPausing] = useState(false);
+  // A long question is shown in a few lines; "More…" opens the whole of it.
+  const [questionOpen, setQuestionOpen] = useState(false);
   const pauseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const rateRef = useRef(rate);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -101,6 +106,12 @@ export default function RoomScene({
   }, [positions]);
   const seatIndex = useMemo(() => new Map(seats.map((seat, i) => [seat.id, i])), [seats]);
   const seatVoices = useMemo(() => pickVoices(voices, seats.length), [voices, seats.length]);
+  const chaseVoice = useMemo(() => accentVoice(voices), [voices]);
+  /** The natural voice for a speaker: Chase's Australian, or the seat's own. */
+  const naturalVoice = useCallback(
+    (seat: GuestModel) => (seat.id === CHASE.id ? CHASE_VOICE : seatVoice(seatIndex.get(seat.id) ?? 0)),
+    [seatIndex],
+  );
   const current = items[index] ?? null;
   const currentKey = current?.key;
   const currentText = current?.text ?? "";
@@ -112,6 +123,8 @@ export default function RoomScene({
   const spokenCountRef = useRef(spokenCount);
   const caption = sentences[sentence] ?? "";
   const speakerSeat = current ? seatIndex.get(current.seat.id) ?? -1 : -1;
+  const isChase = current?.seat.id === CHASE.id;
+  const currentVoice = current ? naturalVoice(current.seat) : "";
   const done = finished && index >= items.length;
   const active = playing && phase === "speaking" && !pausing;
 
@@ -148,11 +161,11 @@ export default function RoomScene({
   }, [seats]);
 
   const getAudio = useCallback(
-    (key: string, text: string, seat: number) => {
+    (key: string, text: string, voice: string) => {
       let pending = audioCache.current.get(key);
       if (!pending) {
         onSpeech?.(text.length);
-        pending = requestSpeech(apiKey, text, seatVoice(seat)).then((blob) => URL.createObjectURL(blob));
+        pending = requestSpeech(apiKey, text, voice).then((blob) => URL.createObjectURL(blob));
         audioCache.current.set(key, pending);
         pending.catch(() => audioCache.current.delete(key));
       }
@@ -171,9 +184,9 @@ export default function RoomScene({
     if (roomMode !== "natural" || phase === "idle" || phase === "writing") return;
     for (const upcoming of items.slice(index, index + 2)) {
       if (upcoming.seat.id === PERSON.id) continue;
-      getAudio(upcoming.key, upcoming.text, seatIndex.get(upcoming.seat.id) ?? 0).catch(() => {});
+      getAudio(upcoming.key, upcoming.text, naturalVoice(upcoming.seat)).catch(() => {});
     }
-  }, [roomMode, items, index, getAudio, seatIndex, phase]);
+  }, [roomMode, items, index, getAudio, naturalVoice, phase]);
 
   useEffect(() => {
     spokenCountRef.current = spokenCount;
@@ -182,7 +195,7 @@ export default function RoomScene({
   useEffect(() => {
     if (!active || !currentKey || effectiveMode !== "natural") return;
     let cancelled = false;
-    getAudio(currentKey, currentText, Math.max(speakerSeat, 0))
+    getAudio(currentKey, currentText, currentVoice)
       .then((url) => {
         if (cancelled) return;
         const audio = new Audio(url);
@@ -228,7 +241,7 @@ export default function RoomScene({
       audioRef.current?.pause();
       audioRef.current = null;
     };
-  }, [active, currentKey, currentText, speakerSeat, effectiveMode, sentences, getAudio, nextSpeaker]);
+  }, [active, currentKey, currentText, currentVoice, effectiveMode, sentences, getAudio, nextSpeaker]);
 
   useEffect(() => {
     const cache = audioCache.current;
@@ -259,10 +272,10 @@ export default function RoomScene({
         else advance();
       };
       const utterance = new SpeechSynthesisUtterance(caption);
-      const voice = seatVoices[speakerSeat] ?? null;
+      const voice = (isChase ? chaseVoice : seatVoices[speakerSeat]) ?? null;
       if (voice) utterance.voice = voice;
       utterance.rate = rate;
-      utterance.pitch = SEAT_PITCH[speakerSeat % SEAT_PITCH.length] ?? 1;
+      utterance.pitch = isChase ? 1 : (SEAT_PITCH[speakerSeat % SEAT_PITCH.length] ?? 1);
       utterance.onend = finish;
       utterance.onerror = () => {
         if (cancelled) return;
@@ -280,7 +293,7 @@ export default function RoomScene({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [active, currentKey, sentence, spokenCount, caption, effectiveMode, rate, seatVoices, speakerSeat, voices.length, nextSpeaker]);
+  }, [active, currentKey, sentence, spokenCount, caption, effectiveMode, rate, seatVoices, chaseVoice, isChase, speakerSeat, voices.length, nextSpeaker]);
 
   useEffect(() => () => synth()?.cancel(), []);
 
@@ -388,7 +401,16 @@ export default function RoomScene({
           );
         })}
 
-        {phase !== "idle" && question && <p className="stage-question">{question}</p>}
+        {phase !== "idle" && question && (
+          <div className="stage-question" data-open={questionOpen || undefined}>
+            <p>{question}</p>
+            {question.length > QUESTION_PEEK && (
+              <button className="stage-question-more" onClick={() => setQuestionOpen((open) => !open)} type="button">
+                {questionOpen ? "Less" : "More…"}
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="stage-center">
           {phase === "idle" && children}

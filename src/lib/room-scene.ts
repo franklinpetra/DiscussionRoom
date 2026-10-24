@@ -134,11 +134,19 @@ export function pickVoices<V extends { name: string; lang: string; localService?
     .sort((a, b) => b.score - a.score)
     .map(({ voice }) => voice);
   if (!english.length) return Array.from({ length: count }, () => null);
-  // Like the natural voices, the first seat gets an Australian (or else British) voice when the browser has one.
-  const accent =
-    english.find((voice) => /en[-_]au/i.test(voice.lang)) ?? english.find((voice) => /en[-_]gb/i.test(voice.lang));
-  const ordered = accent ? [accent, ...english.filter((voice) => voice !== accent)] : english;
+  // The Australian voice belongs to Chase; seats use the others while there are enough.
+  const accent = accentVoice(voices);
+  const others = english.filter((voice) => voice !== accent);
+  const ordered = others.length ? others : english;
   return Array.from({ length: count }, (_, index) => ordered[index % ordered.length]);
+}
+
+/** Chase's browser voice, like the natural one: Australian, or else British, when the browser has one. */
+export function accentVoice<V extends { name: string; lang: string }>(voices: V[]): V | null {
+  const english = voices.filter((voice) => !NOVELTY_VOICES.test(voice.name));
+  return (
+    english.find((voice) => /en[-_]au/i.test(voice.lang)) ?? english.find((voice) => /en[-_]gb/i.test(voice.lang)) ?? null
+  );
 }
 
 export const SEAT_PITCH = [1, 0.88, 1.1, 0.95, 1.05, 0.82];

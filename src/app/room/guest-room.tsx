@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import InfoDialogs from "@/app/room/info-dialogs";
 import KeyControl, { type KeyControlHandle } from "@/app/room/key-control";
 import ModelPicker, { type ModelChoice } from "@/app/room/model-picker";
-import ContributionMap from "@/app/room/contribution-map";
+import RoomScorecard from "@/app/room/scorecard";
 import PrintReport from "@/app/room/print-report";
 import RoomScene, { type ScenePhase } from "@/app/room/room-scene";
 import SceneGuard from "@/app/room/scene-guard";
@@ -57,16 +57,15 @@ import {
 } from "@/lib/guest-room";
 import {
   buildJudgePrompt,
-  kindOf,
-  parseVerdicts,
+  buildSoloPrompt,
+  parseScorecard,
   pickJudge,
-  readHistory,
-  recordHistory,
-  tally,
-  type History,
-  type KindId,
-  type Verdict,
-} from "@/lib/contributions";
+  readScoreHistory,
+  recordScorecard,
+  recordTap,
+  type ScoreHistory,
+  type TapId,
+} from "@/lib/scorecard";
 import { keyUsage } from "@/lib/openrouter-check";
 import { buildMarkdown } from "@/lib/report";
 import { buildSharpenPrompt, parseSharpened, type Sharpened } from "@/lib/sharpen";
@@ -101,13 +100,11 @@ function writeRotation(value: number) {
   }
 }
 
-/** The outside judge's label for a turn, with its reason on hover. */
-function VerdictChip({ verdict }: { verdict: Verdict }) {
-  const kind = kindOf(verdict.kind as KindId);
+/** Marks a turn where the outside judge found the room discovered something; the point shows on hover. */
+function DiscoveryChip({ point }: { point: string }) {
   return (
-    <span className="verdict-chip" title={verdict.reason || kind.label}>
-      <span className="dot" style={{ background: kind.color }} aria-hidden="true" />
-      {kind.label}
+    <span className="discovery-chip" title={point}>
+      ✦ Sparked a discovery
     </span>
   );
 }
@@ -157,7 +154,9 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
   const [voiceCharacters, setVoiceCharacters] = useState(0);
   // "Sharpen my question": the suggestion, and the person's own words to go back to.
   const [sharpening, setSharpening] = useState(false);
-  const [history, setHistory] = useState<History>({ runs: [], models: {} });
+  const [history, setHistory] = useState<ScoreHistory>({ runs: [], sparks: {} });
+  // The person's own answer to "did it change your mind?", for the current discussion.
+  const [tap, setTap] = useState<TapId | null>(null);
   const [sharpened, setSharpened] = useState<(Sharpened & { original: string }) | null>(null);
   // What the key had spent when this discussion began, to read the exact charge afterwards.
   const usageAtStart = useRef<Promise<number | null> | null>(null);
@@ -304,6 +303,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
     const seats = assignNicknames(seated);
     setRunSeats(seats);
     setSharpened(null);
+    setTap(null);
     setVoiceCharacters(0);
     setExactCharge("");
     usageAtStart.current = keyUsage(apiKey);
@@ -335,7 +335,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
         errors: [...currentRun.errors],
         hands: { ...currentRun.hands },
         listening: { ...currentRun.listening! },
-        verdicts: currentRun.verdicts ? { ...currentRun.verdicts } : undefined,
+        scorecard: currentRun.scorecard ? { ...currentRun.scorecard } : undefined,
       });
     publish();
     pendingPersonRef.current = null;
@@ -569,6 +569,16 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
       }));
       const synthesizer = pickSynthesizer(candidates, rotation)!;
       setConversing(false);
+      // The fair comparison for "did the room beat one model?": the synthesizer's model, alone.
+      const solo = requestCompletion(
+        apiKey,
+        synthesizer,
+        buildSoloPrompt(cleanQuestion, attachments),
+        activeController.signal,
+      ).then(
+        (turn) => ({ ...turn, text: parseTurnMarkers(turn.text).text }),
+        () => null,
+      );
       let synthesis = await synthesize(heard(), synthesizer, true, activeController);
       if (stopped()) return;
       if (synthesis && requestsAnotherRound(synthesis.text) && canTalk) {
@@ -585,37 +595,52 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
       currentRun.synthesis = synthesis;
       publish();
 
-      // An outside judge labels every conversation turn while the parting thoughts are written.
+      // A strong outside judge scores the room, blind to who said what, while the parting thoughts are written.
       const spokenTurns = currentRun.rounds.find((round) => round.name === CONVERSATION)?.turns ?? [];
       const judge = pickJudge(seats);
-      const judging = spokenTurns.length
-        ? requestCompletion(
-            apiKey,
-            judge,
-            buildJudgePrompt(cleanQuestion, blind, spokenTurns),
-            activeController.signal,
-            undefined,
-            PARTING_OPTIONS,
-          ).then(
-            (reply) => {
+      const judging = synthesis
+        ? (async () => {
+            currentRun.judging = "pending";
+            currentRun.judge = judge;
+            publish();
+            const alone = await solo;
+            if (alone) {
+              currentRun.solo = alone;
+              currentRun.listening!.tokens += alone.usage?.total_tokens ?? 0;
+              currentRun.listening!.cost += alone.usage?.cost ?? 0;
+            }
+            const roomFirst = Math.random() < 0.5;
+            const reply = alone
+              ? await requestCompletion(
+                  apiKey,
+                  judge,
+                  buildJudgePrompt({
+                    question: cleanQuestion,
+                    seats,
+                    blind,
+                    conversation: spokenTurns,
+                    roomAnswer: synthesis.text,
+                    soloAnswer: alone.text,
+                    roomFirst,
+                  }),
+                  activeController.signal,
+                ).catch(() => null)
+              : null;
+            if (reply) {
               currentRun.listening!.tokens += reply.usage?.total_tokens ?? 0;
               currentRun.listening!.cost += reply.usage?.cost ?? 0;
-              currentRun.verdicts = parseVerdicts(reply.text, spokenTurns);
-              currentRun.judge = judge;
-              setHistory(
-                recordHistory(
-                  readHistory(),
-                  currentRun.createdAt,
-                  seats,
-                  tally(seats, spokenTurns, currentRun.verdicts as Record<string, Verdict>),
-                ),
-              );
-              publish();
-            },
-            () => {
-              // Without a judge the discussion still stands; the chart simply doesn't appear.
-            },
-          )
+            }
+            const card = reply ? parseScorecard(reply.text, spokenTurns, roomFirst) : null;
+            if (card) {
+              currentRun.scorecard = card;
+              currentRun.judging = "done";
+              setHistory(recordScorecard(readScoreHistory(), currentRun.createdAt, seats, card));
+            } else {
+              // Without a judge the discussion still stands; the scorecard says it couldn't be scored.
+              currentRun.judging = "failed";
+            }
+            publish();
+          })()
         : Promise.resolve();
 
       if (synthesis) {
@@ -724,6 +749,17 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
     anchor.download = "the-room.md";
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  // Turns where the judge found the room discovered something, with the point it found.
+  const discoveryAt = new Map(
+    (run?.scorecard?.discoveries ?? []).flatMap((item) => (item.turnId ? [[item.turnId, item.point] as const] : [])),
+  );
+
+  function answerTap(answer: TapId) {
+    if (!run) return;
+    setTap(answer);
+    setHistory(recordTap(readScoreHistory(), run.createdAt, answer));
   }
 
   const allTurns = run
@@ -955,9 +991,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
                         {turn.kind === "reply" && <small> answers {turn.respondingTo}</small>}
                         {turn.kind === "person" && <small> joins in</small>}
                       </strong>
-                      {turn.id && run.verdicts?.[turn.id] && (
-                        <VerdictChip verdict={run.verdicts[turn.id] as Verdict} />
-                      )}
+                      {turn.id && discoveryAt.get(turn.id) && <DiscoveryChip point={discoveryAt.get(turn.id)!} />}
                       {turn.kind !== "person" && <span>{turn.latency}s</span>}
                     </div>
                     {turn.cutAt != null ? (
@@ -1001,16 +1035,16 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
             </section>
           )}
 
-          {run?.verdicts && run.judge && (
-            <ContributionMap
-              counts={tally(
-                runSeats,
-                run.rounds.find((round) => round.name === CONVERSATION)?.turns ?? [],
-                run.verdicts as Record<string, Verdict>,
-              )}
+          {run?.synthesis && run.judging && run.judge && (
+            <RoomScorecard
               history={history}
               judge={run.judge}
+              judging={run.judging}
+              onTap={answerTap}
+              scorecard={run.scorecard}
               seats={runSeats}
+              solo={run.solo}
+              tap={tap}
             />
           )}
 

@@ -64,7 +64,10 @@ export function spokenText(turn: GuestTurn) {
 }
 
 const CONVERSATION_SPIRIT =
-  "This is a live conversation, not a series of replies. People in a good conversation rarely " +
+  "This is a live conversation, not a series of replies. Its point is to listen well and build " +
+  "on one another, the way all of us build on what those before us understood: something you " +
+  "hear should let you see what you could not have seen alone, often something no one " +
+  "expected. People in a good conversation rarely " +
   "answer the last speaker point by point; something they hear sparks a thought, and they add " +
   "what no one has said yet: a new point, an unexpected connection, a consequence, an example, " +
   "the place an idea leads, or the question everyone is avoiding. Nobody knows where it will " +

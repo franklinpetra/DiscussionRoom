@@ -1,3 +1,5 @@
+import type { Scorecard } from "@/lib/scorecard";
+
 export const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
 export const OPENROUTER_MODELS_API = "https://openrouter.ai/api/v1/models";
 export const OPENROUTER_ZDR_API = "https://openrouter.ai/api/v1/endpoints/zdr";
@@ -140,9 +142,13 @@ export type GuestRun = {
   hands?: Record<string, Hand[]>;
   /** Tokens and cost of the listening checks, which aren't turns of their own. */
   listening?: { tokens: number; cost: number };
-  /** An outside judge's label for each conversation turn, keyed by turn id (see contributions.ts). */
-  verdicts?: Record<string, { kind: string; reason: string }>;
-  /** The model that judged the turns; it had no seat in the room. */
+  /** The synthesizer's model answering alone, for the "did the room beat one model?" test. */
+  solo?: GuestTurn;
+  /** An outside judge's scorecard for the discussion (see scorecard.ts). */
+  scorecard?: Scorecard;
+  /** Where the judging stands; the scorecard appears once it is done. */
+  judging?: "pending" | "done" | "failed";
+  /** The strong model that judged the room, without knowing who said what. */
   judge?: GuestModel;
 };
 
@@ -168,12 +174,18 @@ export const VOICE =
   "claims with verifiable sources where you can; never invent a citation or present an " +
   "unverified claim as established. Write prose, without headings or bullet lists.";
 
+/** Who the room is talking to, from the blind round to the synthesis. */
+export const AUDIENCE =
+  "Your reader is earnest and genuinely wants to understand, including the less obvious but " +
+  "perhaps bigger truth beneath the question, when there is one. Write for that reader, and " +
+  "never invent depth that isn't there.";
+
 export const KEY_PHRASE_INSTRUCTION =
   "Finally, on a separate last line, write KEY: followed by the heart of your point in eight " +
   "words or fewer. It will be shown on its own, so make it vivid and self-contained.";
 
 const INDEPENDENT_SYSTEM =
-  `${VOICE}\n\n` +
+  `${VOICE}\n\n${AUDIENCE}\n\n` +
   "Examine the question from several perspectives and stakeholders; look ten years forward or " +
   "a century back if that reveals something. Find the most consequential insight you can " +
   "defend and explain why it matters. Do not force a contrarian position when the conventional " +
@@ -311,7 +323,7 @@ export function buildSynthesisPrompt(
     {
       role: "system",
       content:
-        `${VOICE}\n\n` +
+        `${VOICE}\n\n${AUDIENCE}\n\n` +
         "You are writing the synthesis for a room of independent AI models that answered a " +
         "question alone and then discussed it. You come to it with fresh context: you read the " +
         "record, you do not carry a side.\n\n" +

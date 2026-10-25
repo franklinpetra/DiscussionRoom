@@ -6,6 +6,7 @@ import RoomSwitch from "@/app/room-switch";
 import InfoDialogs from "@/app/room/info-dialogs";
 import KeyControl, { type KeyControlHandle } from "@/app/room/key-control";
 import type { GuestModel } from "@/lib/guest-room";
+import { keyUsage } from "@/lib/openrouter-check";
 import { sourceHref, sourceLabel } from "@/lib/report";
 import {
   addressee,
@@ -99,7 +100,10 @@ export default function ClockRoom() {
   const [running, setRunning] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
+  const [exactCharge, setExactCharge] = useState("");
   const controllerRef = useRef<AbortController | null>(null);
+  // What the key had spent when this project began, to read the exact charge afterwards.
+  const usageAtStart = useRef<Promise<number | null> | null>(null);
   const keyRef = useRef<KeyControlHandle>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -153,6 +157,8 @@ export default function ClockRoom() {
     const controller = new AbortController();
     controllerRef.current = controller;
     setError("");
+    setExactCharge("");
+    usageAtStart.current = keyUsage(apiKey);
     setStarted(true);
     setRunning(true);
     setEntries([{ from: "person", text: brief.trim() }]);
@@ -189,6 +195,16 @@ export default function ClockRoom() {
     if (!controller.signal.aborted) setEntries((current) => [...current, { from: "seat", making: answer }]);
   }
 
+  async function checkExactCharge() {
+    setExactCharge("Asking OpenRouter…");
+    const [before, now] = await Promise.all([usageAtStart.current, keyUsage(apiKey)]);
+    setExactCharge(
+      before == null || now == null
+        ? "OpenRouter didn't say. Your activity page at openrouter.ai has the full record."
+        : `Charged to your key since this project began: $${Math.max(0, now - before).toFixed(4)}. OpenRouter can take a minute to record the last requests, and anything else using this key counts too.`,
+    );
+  }
+
   function reset() {
     controllerRef.current?.abort();
     setEntries([]);
@@ -200,7 +216,7 @@ export default function ClockRoom() {
   return (
     <div className="clock-room">
       <header className="masthead room-masthead">
-        <Link className="wordmark" href="/">The Room</Link>
+        <Link className="wordmark" href="/clock">Creative Clock</Link>
         <RoomSwitch current="clock" />
         <nav className="header-nav" aria-label="About this room">
           <InfoDialogs room="clock" />
@@ -209,7 +225,7 @@ export default function ClockRoom() {
       </header>
 
       <section className="clock-intro">
-        <p className="eyebrow">The Clock · new and experimental</p>
+        <p className="eyebrow">New and experimental</p>
         <h1>What shall we make?</h1>
         <p>
           Tell the clock about your project, then seat the makers you need. The hand goes once around the face:
@@ -431,7 +447,13 @@ export default function ClockRoom() {
       {started && (
         <p className="clock-cost">
           About ${cost.toFixed(3)} so far on your key{makings.some((m) => m.seatId === "sound") ? ", plus about $0.04 for the theme" : ""}.
-          Pages built by the room run sealed off from this page and your key.
+          Pages built by the room run sealed off from this page and your key.{" "}
+          {!running && (
+            <button className="quiet-link" onClick={checkExactCharge} type="button">
+              Check the exact charge on my key
+            </button>
+          )}
+          {exactCharge && <> · {exactCharge}</>}
         </p>
       )}
     </div>

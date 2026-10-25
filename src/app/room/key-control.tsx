@@ -104,7 +104,7 @@ export default function KeyControl({ apiKey, onChange, models, ref }: KeyControl
               openrouter.ai/keys
             </a>
             . This tab sends it only to <code>openrouter.ai</code>, in the{" "}
-            <code>Authorization</code> header. The Room&apos;s server never receives it, and
+            <code>Authorization</code> header. This site&apos;s server never receives it, and
             OpenRouter bills you directly. Enter it here, not in <code>.env.local</code>.
           </p>
           <input

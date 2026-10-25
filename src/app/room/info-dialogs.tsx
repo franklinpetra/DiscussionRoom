@@ -66,7 +66,7 @@ export default function InfoDialogs({ room }: { room: "discussion" | "clock" }) 
         </dialog>
       ) : (
         <dialog aria-labelledby="how-title" className="room-dialog room-dialog-wide" ref={howRef}>
-          <h2 id="how-title">How the Clock works</h2>
+          <h2 id="how-title">How Creative Clock works</h2>
           <p>
             You describe a project and seat the makers it needs. Each seat is a model with one job, and
             every step is a request made from this browser tab.
@@ -105,7 +105,7 @@ export default function InfoDialogs({ room }: { room: "discussion" | "clock" }) 
         <p>Four claims, and what makes each one true rather than promised.</p>
         <h3>Your question goes straight to OpenRouter.</h3>
         <p>
-          The Room&apos;s server delivers this page and handles optional sign-in. A guest
+          This site&apos;s server delivers this page and handles optional sign-in. A guest
           discussion never passes through it. Your browser sends the question, the answers and
           your key directly to <code>openrouter.ai</code>. The page&apos;s security policy only
           allows connections to OpenRouter and our sign-in service.
@@ -113,7 +113,7 @@ export default function InfoDialogs({ room }: { room: "discussion" | "clock" }) 
         <h3>Files are read in your browser.</h3>
         <p>
           When you attach a document, this tab extracts its text. That text goes to OpenRouter
-          with your question; the file itself is never uploaded to The Room.
+          with your question; the file itself is never uploaded to this site.
         </p>
         <h3>Your key stays with you.</h3>
         <p>
@@ -127,7 +127,7 @@ export default function InfoDialogs({ room }: { room: "discussion" | "clock" }) 
           is unavailable, OpenRouter may answer with GLM-5.3 Flash under the same rule, and the
           transcript names the model that actually answered.
           {room === "clock" &&
-            " One exception in the Clock: the music model that writes Sound's theme has no such route, so it is sent only the project's description and your slant."}
+            " One exception in Creative Clock: the music model that writes Sound's theme has no such route, so it is sent only the project's description and your slant."}
         </p>
         <p className="dialog-note">
           What OpenRouter and the model vendors do with a request is between you and them. It

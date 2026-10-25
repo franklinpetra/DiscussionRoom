@@ -3,7 +3,9 @@ import {
   ANOTHER_ROUND_MARKER,
   buildIndependentPrompt,
   buildSynthesisPrompt,
+  assignChairs,
   DEFAULT_MODELS,
+  DEFAULT_SEATED,
   FALLBACK_MODEL,
   isPass,
   parseCatalog,
@@ -161,14 +163,26 @@ describe("OpenRouter guest request", () => {
     ).rejects.toThrow("spent its whole token budget thinking");
   });
 
-  it("uses the five requested OpenRouter models as the default participants", () => {
-    expect(DEFAULT_MODELS.map((model) => model.id)).toEqual([
-      "anthropic/claude-haiku-5.5",
-      "openai/gpt-6-luna",
+  it("seats Opus 4.8, GPT-5.5, Gemini 3.5 Flash, Kimi K2.5, Grok 4.3 and GPT-5.4 Mini by default, each in its own chair", () => {
+    expect(DEFAULT_SEATED).toEqual([
+      "anthropic/claude-opus-4.8",
+      "openai/gpt-5.5",
+      "google/gemini-3.5-flash",
+      "moonshotai/kimi-k2.5",
+      "x-ai/grok-4.3",
       "openai/gpt-5.4-mini",
-      "google/gemini-3.8-flash",
-      "deepseek/deepseek-v4.1-flash",
     ]);
+    for (const id of DEFAULT_SEATED) expect(DEFAULT_MODELS.some((model) => model.id === id)).toBe(true);
+    expect(DEFAULT_MODELS.some((model) => model.id.startsWith("deepseek/"))).toBe(false);
+    const seated = DEFAULT_MODELS.filter((model) => DEFAULT_SEATED.includes(model.id));
+    expect(new Set(assignChairs(seated).map((model) => model.chair)).size).toBe(seated.length);
+  });
+
+  it("gives every seat its own chair, keeping preferred chairs where it can", () => {
+    const luna = DEFAULT_MODELS.find((model) => model.id === "openai/gpt-6-luna")!;
+    const gpt55 = DEFAULT_MODELS.find((model) => model.id === "openai/gpt-5.5")!;
+    expect(luna.chair).toBe(gpt55.chair);
+    expect(assignChairs([gpt55, luna]).map((model) => model.chair)).toEqual(["a", "b"]);
   });
 
   it("reads list-style and null content without leaking thinking or crashing", async () => {

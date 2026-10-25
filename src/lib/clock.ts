@@ -1,5 +1,5 @@
 /**
- * The Clock: a room that makes things. The person describes a project and seats the makers it
+ * Creative Clock: a room that makes things. The person describes a project and seats the makers it
  * needs; the hand goes once around the face in stages (thinkers, then shapers, then makers,
  * then testers), each seat building on what the earlier ones made. Some seats write, some build
  * a page you can click (a prototype, a picture of the data), one paints, one composes.

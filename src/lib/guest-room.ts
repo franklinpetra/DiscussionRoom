@@ -74,13 +74,41 @@ export const FALLBACK_MODEL: GuestModel = {
   vendor: "Z.ai",
 };
 
+/** The models on offer before anyone opens the catalog; DEFAULT_SEATED says which sit down at first. */
 export const DEFAULT_MODELS: readonly GuestModel[] = [
-  { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5", vendor: "Anthropic", color: "#b0592a", chair: "b" },
-  { id: "openai/gpt-6-luna", label: "GPT-6 Luna", vendor: "OpenAI", color: "#1f7a64", chair: "a" },
+  { id: "anthropic/claude-opus-4.8", label: "Claude Opus 4.8", vendor: "Anthropic", color: "#b0592a", chair: "b" },
+  { id: "openai/gpt-5.5", label: "GPT-5.5", vendor: "OpenAI", color: "#1f7a64", chair: "a" },
+  { id: "google/gemini-3.5-flash", label: "Gemini 3.5 Flash", vendor: "Google", color: "#3a5fb0", chair: "g" },
+  { id: "moonshotai/kimi-k2.5", label: "Kimi K2.5", vendor: "Moonshot AI", color: "#6a4fb3", chair: "e" },
+  { id: "x-ai/grok-4.3", label: "Grok 4.3", vendor: "xAI", color: "#2c6f80", chair: "c" },
   { id: "openai/gpt-5.4-mini", label: "GPT-5.4 Mini", vendor: "OpenAI", color: "#6b7f1f", chair: "d" },
-  { id: "google/gemini-3.8-flash", label: "Gemini 3.8 Flash", vendor: "Google", color: "#3a5fb0", chair: "g" },
-  { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", vendor: "DeepSeek", color: "#6a4fb3", chair: "e" },
+  { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5", vendor: "Anthropic", color: "#a23c6b", chair: "f" },
+  { id: "openai/gpt-6-luna", label: "GPT-6 Luna", vendor: "OpenAI", color: "#8a6d1f", chair: "a" },
+  { id: "google/gemini-3.8-flash", label: "Gemini 3.8 Flash", vendor: "Google", color: "#4f5d75", chair: "g" },
 ];
+
+/** Seated when the room opens: one model from each of five companies, plus GPT-5.4 Mini, the visionary. */
+export const DEFAULT_SEATED: readonly string[] = [
+  "anthropic/claude-opus-4.8",
+  "openai/gpt-5.5",
+  "google/gemini-3.5-flash",
+  "moonshotai/kimi-k2.5",
+  "x-ai/grok-4.3",
+  "openai/gpt-5.4-mini",
+];
+
+/**
+ * Gives every seat its own chair: a model keeps the chair it prefers when no one earlier has it,
+ * otherwise it takes the first free one. Seven chairs, at most six seats, so no two ever match.
+ */
+export function assignChairs<T extends GuestModel>(models: T[]): T[] {
+  const taken = new Set<Chair>();
+  return models.map((model) => {
+    const chair = model.chair && !taken.has(model.chair) ? model.chair : CHAIRS.find((item) => !taken.has(item))!;
+    taken.add(chair);
+    return { ...model, chair };
+  });
+}
 
 /** The person who asked, when they join the conversation. Never seated, never sent to a model. */
 export const PERSON: GuestModel = { id: "person", label: "You", vendor: "The person who asked", color: "#2b2f2c" };

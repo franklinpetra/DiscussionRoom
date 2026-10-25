@@ -33,12 +33,14 @@ import {
   type FloorContext,
 } from "@/lib/floor";
 import {
+  assignChairs,
   assignNicknames,
   buildChasePrompt,
   buildIndependentPrompt,
   buildSynthesisPrompt,
   CHASE,
   DEFAULT_MODELS,
+  DEFAULT_SEATED,
   isPass,
   MAX_QUESTION_LENGTH,
   MIN_MODELS,
@@ -81,7 +83,7 @@ const MAX_PERSON_LENGTH = 600;
 
 const ROTATION_KEY = "theroom.synthesisRotation";
 
-const initialModels: ModelChoice[] = DEFAULT_MODELS.map((model) => ({ ...model, selected: true }));
+const initialModels: ModelChoice[] = DEFAULT_MODELS.map((model) => ({ ...model, selected: DEFAULT_SEATED.includes(model.id) }));
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -171,7 +173,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
   const keyControlRef = useRef<KeyControlHandle>(null);
 
   const seated = useMemo(() => models.filter((model) => model.selected), [models]);
-  const seatedNames = useMemo(() => assignNicknames(seated), [seated]);
+  const seatedNames = useMemo(() => assignNicknames(assignChairs(seated)), [seated]);
   const playlist = useMemo(() => (run ? buildPlaylist(run) : []), [run]);
   const attachedChars = attachments.reduce((total, item) => total + item.text.length, 0);
 
@@ -304,7 +306,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
       return;
     }
 
-    const seats = assignNicknames(seated);
+    const seats = assignNicknames(assignChairs(seated));
     setRunSeats(seats);
     setSharpened(null);
     setTap(null);
@@ -940,7 +942,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
   return (
     <>
       <header className="masthead room-masthead">
-        <Link className="wordmark" href="/">The Room</Link>
+        <Link className="wordmark" href="/">Discussion</Link>
         <RoomSwitch current="discussion" />
         <nav className="header-nav" aria-label="About this room">
           <InfoDialogs room="discussion" />

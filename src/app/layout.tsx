@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "The Room — ideas worth discussing",
+  title: "Discussion · ideas worth discussing",
   description:
     "A private workspace for independent AI perspectives, thoughtful discussion, and useful takeaways.",
   icons: {

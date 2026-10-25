@@ -30,7 +30,7 @@ export default function PrintReport({ run }: { run: GuestRun }) {
   return createPortal(
     <article className="print-report" aria-hidden="true">
       <header>
-        <p className="print-kicker">The Room · {reportDate(run.createdAt)}</p>
+        <p className="print-kicker">Discussion · {reportDate(run.createdAt)}</p>
         <h1>{run.question}</h1>
         {!!run.attachments.length && (
           <p className="print-attached">

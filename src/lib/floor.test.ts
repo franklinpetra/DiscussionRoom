@@ -191,12 +191,15 @@ describe("the record", () => {
 describe("nicknames", () => {
   it("uses family names, and the telling word when two of a family sit together", async () => {
     const { assignNicknames, DEFAULT_MODELS } = await import("@/lib/guest-room");
-    expect(assignNicknames([...DEFAULT_MODELS]).map((model) => model.nickname)).toEqual([
+    const { DEFAULT_SEATED } = await import("@/lib/guest-room");
+    const seated = DEFAULT_MODELS.filter((model) => DEFAULT_SEATED.includes(model.id));
+    expect(assignNicknames(seated).map((model) => model.nickname)).toEqual([
       "Claude",
-      "Luna",
-      "Mini",
+      "GPT-5.5",
       "Gemini",
-      "DeepSeek",
+      "Kimi",
+      "Grok",
+      "Mini",
     ]);
     const claudes: GuestModel[] = [
       { id: "a", label: "Claude Haiku 5.5", vendor: "Anthropic" },

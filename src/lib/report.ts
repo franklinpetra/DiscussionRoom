@@ -38,7 +38,7 @@ export function buildMarkdown(run: GuestRun) {
   const { notes, numbers } = endnotes(run);
   const marks = (turn: GuestTurn) => numbers(turn).map((n) => `[^${n}]`).join("");
   const lines: string[] = [
-    "# The Room",
+    "# Discussion",
     "",
     `*${reportDate(run.createdAt)} · ${reportId(run.createdAt)}*`,
     "",

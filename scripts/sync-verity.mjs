@@ -5,7 +5,7 @@
  *
  * Copies Verity's page, scripts, styles, icons and document readers into public/verity/,
  * then makes three small changes to its page: a <base href="/verity/"> so its relative paths
- * resolve here, the three-room switcher (The Discussion, Verity, The Clock), and prefill.js, which fills
+ * resolve here, the three-room switcher (Discussion, Verity, Creative Clock), and prefill.js, which fills
  * the decision box from ?q= so a question linked from elsewhere opens ready to run. Verity's own
  * strict content policy is kept, with base-uri relaxed to 'self' to allow that <base>.
  * Re-run after changing Verity.
@@ -40,8 +40,8 @@ replace("base-uri 'none'", "base-uri 'self'", "base-uri in the content policy");
 replace(
   '<a class="wordmark" href="./" id="wordmark">Verity</a>',
   '<a class="wordmark" href="./" id="wordmark">Verity</a>\n      ' +
-    '<nav class="room-switch" aria-label="Rooms"><a href="/">The Discussion</a>' +
-    '<a href="/verity" aria-current="page">Verity</a><a href="/clock">The Clock</a></nav>',
+    '<nav class="room-switch" aria-label="Rooms"><a href="/">Discussion</a>' +
+    '<a href="/verity" aria-current="page">Verity</a><a href="/clock">Creative Clock</a></nav>',
   "the wordmark",
 );
 replace(

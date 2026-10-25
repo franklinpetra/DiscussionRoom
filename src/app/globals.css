@@ -3134,3 +3134,27 @@ a {
     transform: none;
   }
 }
+
+/* ---------- Every room's footer ---------- */
+
+.site-footer {
+  display: grid;
+  gap: 6px;
+  margin-top: 48px;
+  padding: 22px 0 36px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.site-footer p {
+  max-width: 70ch;
+  margin: 0 auto;
+}
+
+.site-footer a {
+  color: var(--green-dark);
+  font-weight: 600;
+}

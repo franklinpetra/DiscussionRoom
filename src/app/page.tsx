@@ -20,7 +20,6 @@ const VERITY_EXAMPLES = [
 
 const COMING = [
   { name: "Popcorn", line: "Fast and fun: one line each, every line sparked by the last, then the room picks the one nobody saw coming." },
-  { name: "The Clock", line: "Thinkers of every kind, from visual to musical to business, improvising an idea into existence." },
   { name: "The Podcast", line: "Two hosts talk through your documents, and you can jump in." },
 ];
 
@@ -47,6 +46,7 @@ export default function Arrival() {
         <nav className="header-nav" aria-label="Rooms">
           <Link className="header-link" href="/room">The Discussion</Link>
           <a className="header-link" href="/verity">Verity</a>
+          <Link className="header-link" href="/clock">The Clock</Link>
         </nav>
       </header>
 
@@ -140,6 +140,17 @@ export default function Arrival() {
           </div>
         </article>
       </div>
+
+      <section className="arrival-clock" aria-labelledby="clock-title">
+        <p className="eyebrow">New and experimental</p>
+        <h2 id="clock-title">The Clock</h2>
+        <p>
+          Makers of every kind sit around a clock face: thinkers, a data artist, interface designers, a painter, a
+          composer, a filmmaker, testers. Describe a project, seat the ones you need, and they build it together
+          into something you can try.
+        </p>
+        <Link className="button" href="/clock">Enter The Clock</Link>
+      </section>
 
       <section className="arrival-coming" aria-labelledby="coming-title">
         <h2 id="coming-title">More rooms on the way</h2>

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import RoomSwitch from "@/app/room-switch";
+import InfoDialogs from "@/app/room/info-dialogs";
 import KeyControl, { type KeyControlHandle } from "@/app/room/key-control";
 import type { GuestModel } from "@/lib/guest-room";
 import { sourceHref, sourceLabel } from "@/lib/report";
@@ -199,9 +201,9 @@ export default function ClockRoom() {
     <div className="clock-room">
       <header className="masthead room-masthead">
         <Link className="wordmark" href="/">The Room</Link>
-        <nav className="header-nav" aria-label="Rooms and key">
-          <Link className="header-link" href="/room">The Discussion</Link>
-          <a className="header-link" href="/verity">Verity</a>
+        <RoomSwitch current="clock" />
+        <nav className="header-nav" aria-label="About this room">
+          <InfoDialogs room="clock" />
           <KeyControl apiKey={apiKey} models={keyModels} onChange={setApiKey} ref={keyRef} />
         </nav>
       </header>

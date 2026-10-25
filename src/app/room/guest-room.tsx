@@ -7,6 +7,7 @@ import KeyControl, { type KeyControlHandle } from "@/app/room/key-control";
 import ModelPicker, { type ModelChoice } from "@/app/room/model-picker";
 import RoomScorecard from "@/app/room/scorecard";
 import PrintReport from "@/app/room/print-report";
+import RoomSwitch from "@/app/room-switch";
 import RoomScene, { type ScenePhase } from "@/app/room/room-scene";
 import SceneGuard from "@/app/room/scene-guard";
 import {
@@ -940,8 +941,9 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
     <>
       <header className="masthead room-masthead">
         <Link className="wordmark" href="/">The Room</Link>
+        <RoomSwitch current="discussion" />
         <nav className="header-nav" aria-label="About this room">
-          <InfoDialogs />
+          <InfoDialogs room="discussion" />
           <KeyControl
             apiKey={apiKey}
             models={seated}

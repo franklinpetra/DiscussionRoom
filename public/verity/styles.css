@@ -953,16 +953,58 @@ input::placeholder {
   }
 }
 
-/* Added by this site: the way back to every room. */
-.all-rooms {
-  margin-right: 14px;
-  color: inherit;
-  font-size: 13px;
-  opacity: 0.7;
-  text-decoration: none;
+/* Added by this site: the three rooms, centred in the header, as in the other rooms. */
+.top {
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
 }
-.all-rooms:hover,
-.all-rooms:focus-visible {
-  opacity: 1;
-  text-decoration: underline;
+.top .topnav {
+  justify-self: end;
+}
+.room-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.room-switch a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.room-switch a:hover {
+  color: var(--ink);
+}
+.room-switch a:focus-visible {
+  outline: 2px solid #1c6b5c;
+  outline-offset: 1px;
+}
+.room-switch a[aria-current="page"] {
+  color: #ffffff;
+  background: #1c6b5c;
+}
+@media (max-width: 1040px) {
+  .top {
+    grid-template-columns: auto 1fr;
+  }
+  .room-switch {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-self: center;
+  }
+}
+@media (max-width: 420px) {
+  .room-switch a {
+    padding: 0 11px;
+    font-size: 13px;
+  }
 }

@@ -5,8 +5,8 @@
  *
  * Copies Verity's page, scripts, styles, icons and document readers into public/verity/,
  * then makes three small changes to its page: a <base href="/verity/"> so its relative paths
- * resolve here, a "← All rooms" link back to the arrival page, and prefill.js, which fills
- * the decision box from ?q= so the arrival page's examples open ready to run. Verity's own
+ * resolve here, the three-room switcher (The Discussion, Verity, The Clock), and prefill.js, which fills
+ * the decision box from ?q= so a question linked from elsewhere opens ready to run. Verity's own
  * strict content policy is kept, with base-uri relaxed to 'self' to allow that <base>.
  * Re-run after changing Verity.
  */
@@ -39,7 +39,9 @@ replace('<meta charset="utf-8" />', '<meta charset="utf-8" />\n    <base href="/
 replace("base-uri 'none'", "base-uri 'self'", "base-uri in the content policy");
 replace(
   '<a class="wordmark" href="./" id="wordmark">Verity</a>',
-  '<a class="all-rooms" href="/">← All rooms</a>\n      <a class="wordmark" href="./" id="wordmark">Verity</a>',
+  '<a class="wordmark" href="./" id="wordmark">Verity</a>\n      ' +
+    '<nav class="room-switch" aria-label="Rooms"><a href="/">The Discussion</a>' +
+    '<a href="/verity" aria-current="page">Verity</a><a href="/clock">The Clock</a></nav>',
   "the wordmark",
 );
 replace(
@@ -51,7 +53,7 @@ writeFileSync(pagePath, page);
 
 writeFileSync(
   join(target, "prefill.js"),
-  `// Added by this site: an example question from the arrival page arrives as ?q=.
+  `// Added by this site: a question linked from elsewhere arrives as ?q=.
 const question = new URLSearchParams(location.search).get("q");
 const box = document.getElementById("decision");
 if (question && box && !box.value) {
@@ -65,18 +67,60 @@ const cssPath = join(target, "styles.css");
 writeFileSync(
   cssPath,
   `${readFileSync(cssPath, "utf8")}
-/* Added by this site: the way back to every room. */
-.all-rooms {
-  margin-right: 14px;
-  color: inherit;
-  font-size: 13px;
-  opacity: 0.7;
-  text-decoration: none;
+/* Added by this site: the three rooms, centred in the header, as in the other rooms. */
+.top {
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
 }
-.all-rooms:hover,
-.all-rooms:focus-visible {
-  opacity: 1;
-  text-decoration: underline;
+.top .topnav {
+  justify-self: end;
+}
+.room-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.room-switch a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.room-switch a:hover {
+  color: var(--ink);
+}
+.room-switch a:focus-visible {
+  outline: 2px solid #1c6b5c;
+  outline-offset: 1px;
+}
+.room-switch a[aria-current="page"] {
+  color: #ffffff;
+  background: #1c6b5c;
+}
+@media (max-width: 1040px) {
+  .top {
+    grid-template-columns: auto 1fr;
+  }
+  .room-switch {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-self: center;
+  }
+}
+@media (max-width: 420px) {
+  .room-switch a {
+    padding: 0 11px;
+    font-size: 13px;
+  }
 }
 `,
 );

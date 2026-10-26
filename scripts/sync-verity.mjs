@@ -5,7 +5,7 @@
  *
  * Copies Verity's page, scripts, styles, icons and document readers into public/verity/,
  * then makes three small changes to its page: a <base href="/verity/"> so its relative paths
- * resolve here, the three-room switcher (Discussion, Verity, Creative Clock), and prefill.js, which fills
+ * resolve here, the three-room switcher (Discussion, Verity, Creative Clock) in place of its wordmark, as in the other rooms, and prefill.js, which fills
  * the decision box from ?q= so a question linked from elsewhere opens ready to run. Verity's own
  * strict content policy is kept, with base-uri relaxed to 'self' to allow that <base>.
  * Re-run after changing Verity.
@@ -39,8 +39,7 @@ replace('<meta charset="utf-8" />', '<meta charset="utf-8" />\n    <base href="/
 replace("base-uri 'none'", "base-uri 'self'", "base-uri in the content policy");
 replace(
   '<a class="wordmark" href="./" id="wordmark">Verity</a>',
-  '<a class="wordmark" href="./" id="wordmark">Verity</a>\n      ' +
-    '<nav class="room-switch" aria-label="Rooms"><a href="/">Discussion</a>' +
+  '<nav class="room-switch" aria-label="Rooms"><a href="/">Discussion</a>' +
     '<a href="/verity" aria-current="page">Verity</a><a href="/clock">Creative Clock</a></nav>',
   "the wordmark",
 );
@@ -67,12 +66,17 @@ const cssPath = join(target, "styles.css");
 writeFileSync(
   cssPath,
   `${readFileSync(cssPath, "utf8")}
-/* Added by this site: the three rooms, centred in the header, as in the other rooms. */
+/* Added by this site: the three rooms, centred in the header, as in the other rooms. The filled
+   pill is the room's name, so there is no separate wordmark. */
 .top {
   display: grid;
   grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
 }
+.top .room-switch {
+  grid-column: 2;
+}
 .top .topnav {
+  grid-column: 3;
   justify-self: end;
 }
 .room-switch {
@@ -86,12 +90,13 @@ writeFileSync(
 .room-switch a {
   display: inline-flex;
   align-items: center;
-  min-height: 36px;
-  padding: 0 16px;
+  min-height: 38px;
+  padding: 0 18px;
   border-radius: 999px;
   color: var(--ink-soft);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -108,12 +113,16 @@ writeFileSync(
 }
 @media (max-width: 1040px) {
   .top {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: 1fr;
   }
-  .room-switch {
+  .top .room-switch {
     grid-row: 2;
-    grid-column: 1 / -1;
+    grid-column: 1;
     justify-self: center;
+  }
+  .top .topnav {
+    grid-row: 1;
+    grid-column: 1;
   }
 }
 @media (max-width: 420px) {

@@ -942,7 +942,6 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
   return (
     <>
       <header className="masthead room-masthead">
-        <Link className="wordmark" href="/">Discussion</Link>
         <RoomSwitch current="discussion" />
         <nav className="header-nav" aria-label="About this room">
           <InfoDialogs room="discussion" />

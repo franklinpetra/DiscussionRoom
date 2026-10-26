@@ -461,9 +461,10 @@ a {
 .guest-live-heading h3 {
   margin: 0;
   color: var(--green-dark);
-  font-family: var(--serif);
+  font-family: var(--sans);
+  letter-spacing: -0.035em;
   font-size: 20px;
-  font-weight: 550;
+  font-weight: 650;
 }
 
 .guest-live-heading p {
@@ -787,7 +788,13 @@ a {
   padding-block: 14px;
 }
 
+/* No separate wordmark: the filled pill in the room switcher is the room's name. */
+.room-masthead .room-switch {
+  grid-column: 2;
+}
+
 .room-masthead .header-nav {
+  grid-column: 3;
   flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 6px 16px;
@@ -808,12 +815,13 @@ a {
 .room-switch a {
   display: inline-flex;
   align-items: center;
-  min-height: 36px;
-  padding: 0 16px;
+  min-height: 38px;
+  padding: 0 18px;
   border-radius: 999px;
   color: var(--ink-soft);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   text-decoration: none;
   white-space: nowrap;
   transition: background 160ms ease, color 160ms ease;
@@ -839,10 +847,15 @@ a {
     grid-template-columns: auto 1fr;
   }
 
-  .room-switch {
+  .room-masthead .room-switch {
     grid-row: 2;
     grid-column: 1 / -1;
     justify-self: center;
+  }
+
+  .room-masthead .header-nav {
+    grid-row: 1;
+    grid-column: 1 / -1;
   }
 }
 
@@ -1597,9 +1610,10 @@ a {
 }
 
 .stage-message strong {
-  font-family: var(--serif);
+  font-family: var(--sans);
+  letter-spacing: -0.035em;
   font-size: 22px;
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .stage-message span {
@@ -2431,9 +2445,10 @@ a {
 
 .contribution-head h3 {
   margin: 0;
-  font-family: var(--serif);
+  font-family: var(--sans);
+  letter-spacing: -0.035em;
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .contribution-scope {
@@ -2469,10 +2484,12 @@ a {
 
 .scorecard-score strong {
   color: var(--green-dark);
-  font-family: var(--serif);
+  font-family: var(--sans);
+  letter-spacing: -0.035em;
   font-size: 44px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  font-weight: 650;
 }
 
 .scorecard-questions {
@@ -2594,15 +2611,16 @@ a {
 .clock-intro {
   display: grid;
   gap: 8px;
-  justify-items: center;
-  text-align: center;
+  justify-items: start;
 }
 
 .clock-intro h1 {
   margin: 0;
-  font-family: var(--serif);
-  font-size: clamp(30px, 4vw, 44px);
-  font-weight: 600;
+  font-family: var(--sans);
+  letter-spacing: -0.035em;
+  font-size: clamp(30px, 4.6vw, 46px);
+  font-weight: 650;
+  line-height: 1.1;
 }
 
 .clock-intro p:last-child {
@@ -2796,9 +2814,10 @@ a {
 }
 
 .clock-brief label {
-  font-family: var(--serif);
+  font-family: var(--sans);
+  letter-spacing: -0.035em;
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .clock-brief textarea {
@@ -2927,9 +2946,10 @@ a {
 .clock-slant h2,
 .clock-made h2 {
   margin: 0;
-  font-family: var(--serif);
+  font-family: var(--sans);
+  letter-spacing: -0.035em;
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .clock-bench ul {
@@ -3135,26 +3155,32 @@ a {
   }
 }
 
-/* ---------- Every room's footer ---------- */
+/* ---------- Every room's footer: the maker's mark beside the caveat and the feedback note ---------- */
 
-.site-footer {
-  display: grid;
-  gap: 6px;
+.room-footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   margin-top: 48px;
-  padding: 22px 0 36px;
+  padding: 20px 0 32px;
   border-top: 1px solid var(--line);
   color: var(--ink-soft);
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.5;
-  text-align: center;
 }
 
-.site-footer p {
-  max-width: 70ch;
-  margin: 0 auto;
+.room-footer img {
+  flex: none;
+  width: 24px;
+  height: auto;
+  opacity: 0.85;
 }
 
-.site-footer a {
+.room-footer p {
+  margin: 0;
+}
+
+.room-footer a {
   color: var(--green-dark);
   font-weight: 600;
 }

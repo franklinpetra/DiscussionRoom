@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import RoomSwitch from "@/app/room-switch";
 import InfoDialogs from "@/app/room/info-dialogs";
@@ -216,7 +215,6 @@ export default function ClockRoom() {
   return (
     <div className="clock-room">
       <header className="masthead room-masthead">
-        <Link className="wordmark" href="/clock">Creative Clock</Link>
         <RoomSwitch current="clock" />
         <nav className="header-nav" aria-label="About this room">
           <InfoDialogs room="clock" />

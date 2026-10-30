@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const DESCRIPTION =
+  "A private workspace for independent AI perspectives, thoughtful discussion, and useful takeaways.";
+
 export const metadata: Metadata = {
+  // Link previews need absolute addresses; this is the site's live address.
+  metadataBase: new URL("https://theroom.click"),
   title: "Discussion · ideas worth discussing",
-  description:
-    "A private workspace for independent AI perspectives, thoughtful discussion, and useful takeaways.",
+  description: DESCRIPTION,
+  // The preview picture itself comes from opengraph-image.jpg beside each page.
+  openGraph: { type: "website", siteName: "Discussion", title: "Discussion", description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: "Discussion", description: DESCRIPTION },
   icons: {
     icon: [
       { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },

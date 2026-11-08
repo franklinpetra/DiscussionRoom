@@ -49,8 +49,11 @@ import {
   CHASE,
   DEFAULT_MODELS,
   DEFAULT_SEATED,
+  DEADLINES,
   HOST,
   hostRoute,
+  timedOut,
+  withDeadline,
   isPass,
   MAX_QUESTION_LENGTH,
   MIN_MODELS,
@@ -264,7 +267,7 @@ export default function GuestRoom({
             apiKey,
             model,
             messages,
-            activeController.signal,
+            withDeadline(activeController.signal, name === "Independent" ? DEADLINES.blind : DEADLINES.stage),
             (delta) => patch(model.id, (live) => ({ ...live, status: "answering", text: live.text + delta })),
             options,
           );
@@ -283,7 +286,9 @@ export default function GuestRoom({
             ...(sources ? { sources } : {}),
           } as GuestTurn;
         } catch (stageError) {
-          const message = getErrorMessage(stageError);
+          const message = timedOut(stageError)
+            ? "Took too long, so the room went on without it."
+            : getErrorMessage(stageError);
           patch(model.id, (live) => ({
             ...live,
             status: activeController.signal.aborted ? "stopped" : "failed",
@@ -412,7 +417,7 @@ export default function GuestRoom({
           apiKey,
           model,
           messages,
-          activeController.signal,
+          withDeadline(activeController.signal, DEADLINES.turn),
           (delta) =>
             setLiveStage((current) =>
               current
@@ -450,7 +455,14 @@ export default function GuestRoom({
           const messages = buildListenPrompt(context, model, canBreak);
           if (!messages) return;
           try {
-            const reply = await requestCompletion(apiKey, model, messages, activeController.signal, undefined, PARTING_OPTIONS);
+            const reply = await requestCompletion(
+              apiKey,
+              model,
+              messages,
+              withDeadline(activeController.signal, DEADLINES.listen),
+              undefined,
+              PARTING_OPTIONS,
+            );
             currentRun.listening!.tokens += reply.usage?.total_tokens ?? 0;
             currentRun.listening!.cost += reply.usage?.cost ?? 0;
             const hand = parseListen(model, reply.text, context.conversation.at(-1));

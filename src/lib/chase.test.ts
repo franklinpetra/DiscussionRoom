@@ -123,3 +123,24 @@ describe("sources as notes", () => {
     expect(markdown).not.toContain("Sources:");
   });
 });
+
+describe("deadlines", () => {
+  it("ends a slow request without stopping the run, and says it ran out of time", async () => {
+    const { withDeadline, timedOut } = await import("@/lib/guest-room");
+    const run = new AbortController();
+    const signal = withDeadline(run.signal, 20);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(signal.aborted).toBe(true);
+    expect(run.signal.aborted).toBe(false);
+    expect(timedOut(signal.reason)).toBe(true);
+  });
+
+  it("still stops at once when the person stops the run", async () => {
+    const { withDeadline, timedOut } = await import("@/lib/guest-room");
+    const run = new AbortController();
+    const signal = withDeadline(run.signal, 60_000);
+    run.abort();
+    expect(signal.aborted).toBe(true);
+    expect(timedOut(signal.reason)).toBe(false);
+  });
+});

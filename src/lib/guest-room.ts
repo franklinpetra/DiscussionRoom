@@ -545,6 +545,19 @@ export function deltaText(content: unknown): string {
     .join("");
 }
 
+/** How long a model may take before the room goes on without it. */
+export const DEADLINES = { blind: 120_000, stage: 90_000, turn: 75_000, listen: 45_000 } as const;
+
+/** The run's own signal, plus a deadline: stopping the run or running out of time both end the request. */
+export function withDeadline(parent: AbortSignal, ms: number): AbortSignal {
+  return AbortSignal.any([parent, AbortSignal.timeout(ms)]);
+}
+
+/** Whether a request ended because its model ran out of time, rather than because the run was stopped. */
+export function timedOut(error: unknown) {
+  return error instanceof DOMException && error.name === "TimeoutError";
+}
+
 export async function requestCompletion(
   apiKey: string,
   model: GuestModel,

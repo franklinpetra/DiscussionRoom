@@ -68,10 +68,15 @@ function item(turn: GuestTurn, stage: PlayStage, key: string): PlayItem {
   };
 }
 
-/** The order in which the room speaks: the blind round, the conversation as it happened, then synthesis and parting lines. */
+/**
+ * The order in which the room speaks: the conversation as it happened, then synthesis and
+ * parting lines. The blind round is never read aloud: it is shown on the cards while it is
+ * written, kept in the written record, and used by each seat as private notes.
+ */
 export function buildPlaylist(run: GuestRun): PlayItem[] {
   const items: PlayItem[] = [];
   run.rounds.forEach((round, index) => {
+    if (round.name === "Independent") return;
     for (const turn of round.turns) {
       items.push(item(turn, round.name as PlayStage, turn.id ?? `${index}-${turn.model.id}`));
     }

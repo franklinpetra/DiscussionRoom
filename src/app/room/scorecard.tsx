@@ -13,6 +13,7 @@ import {
 } from "@/lib/scorecard";
 
 const SOUND_LABEL = { solid: "Holds up", mostly: "Mostly holds up", shaky: "Shaky in places" } as const;
+const DEPTH_LABEL = { deep: "Went well beyond the obvious", some: "Went somewhat past the obvious", obvious: "Stayed with the obvious answer" } as const;
 
 /**
  * How the room did, in four questions: did it beat one model alone, what did it find together,
@@ -78,6 +79,11 @@ export default function RoomScorecard({
               It found <strong>{all.discoveries}</strong> {all.discoveries === 1 ? "thing" : "things"} together
               that no opening answer had.
             </li>
+            {!!all.deep && (
+              <li>
+                It got well beyond the obvious in <strong>{all.deep}</strong> of {all.count}.
+              </li>
+            )}
             <li>
               Your answers:{" "}
               {TAPS.map((item, i) => (
@@ -88,6 +94,14 @@ export default function RoomScorecard({
               ))}
             </li>
           </ul>
+          {all.hosts.length > 1 && (
+            <p className="scorecard-sparks">
+              Host audition:{" "}
+              {all.hosts
+                .map((item) => `${item.host} ${item.averageScore.toFixed(1)} over ${item.runs} (${item.deep} deep)`)
+                .join(" · ")}
+            </p>
+          )}
           {!!Object.keys(history.sparks).length && (
             <p className="scorecard-sparks">
               Who sparked the discoveries:{" "}
@@ -166,6 +180,12 @@ export default function RoomScorecard({
                     {SOUND_LABEL[scorecard.sound]}.{" "}
                     {scorecard.soundWhy && <span className="scorecard-why">{scorecard.soundWhy}</span>}
                   </p>
+                  {scorecard.depth && (
+                    <p>
+                      {DEPTH_LABEL[scorecard.depth]}.{" "}
+                      {scorecard.depthWhy && <span className="scorecard-why">{scorecard.depthWhy}</span>}
+                    </p>
+                  )}
                   {!!scorecard.checks.length && (
                     <>
                       <p className="scorecard-why">Worth checking:</p>

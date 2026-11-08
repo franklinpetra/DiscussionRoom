@@ -42,7 +42,7 @@ describe("playback", () => {
     model, text, latency: 1, usage: null, keyPhrase,
   });
 
-  it("speaks rounds in order, then synthesis, then parting thoughts", () => {
+  it("never reads the blind round aloud: the conversation, then synthesis, then parting thoughts", () => {
     const run: GuestRun = {
       question: "Q",
       attachments: [],
@@ -56,11 +56,9 @@ describe("playback", () => {
       errors: [],
     };
     const items = buildPlaylist(run);
-    expect(items.map((item) => item.stage)).toEqual([
-      "Independent", "Independent", "The conversation", "Synthesis", "Parting thoughts",
-    ]);
-    expect(items[2].phrase).toBe("Key A");
-    expect(items[0].phrase).toBe("A one.");
+    expect(items.map((item) => item.stage)).toEqual(["The conversation", "Synthesis", "Parting thoughts"]);
+    expect(items[0].phrase).toBe("Key A");
+    expect(items[1].phrase).toBe("The discovery.");
     expect(new Set(items.map((item) => item.key)).size).toBe(items.length);
   });
 

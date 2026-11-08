@@ -6,6 +6,19 @@ The `/room` guest experience sends requests directly from the browser to OpenRou
 
 The default guest lineup is Claude Haiku 5.5, GPT-6 Luna, GPT-5.4 Mini, Gemini 3.8 Flash, and DeepSeek V4.1 Flash. OpenRouter may retry a model-routing/provider error with GLM-5.3 Flash. Keep data-training and prompt-publishing opt-ins disabled. Both Room implementations require ZDR endpoints for every selected model and the fallback. OpenRouter's provider and model privacy policies still apply; do not treat ZDR routing as a guarantee that all processing is private.
 
+## The Discussion Room
+
+A run has four parts. The full design is in the Discussion Room spec.
+
+1. **Blind round.** Each seat answers alone. The answer appears on its card as live "thinking aloud" text, in the seat's own typeface and with its own marks (bold, italic, small and struck-out words; see `src/lib/thinking.ts`). It is never read aloud. Each seat uses it afterwards as private notes, and it stays in the written record.
+2. **The host opens.** The house host (`HOST` in `src/lib/guest-room.ts`) is never seated. It reads everyone's notes, picks a tone (playful, mixed or serious), and asks an open question of the seat whose notes hold the least obvious idea. Chase still cuts in with his one-liner first.
+3. **The conversation.** Seats answer, carry ideas past their notes, raise hands and break in, all under shared house rules (yes-and, callbacks, an arc, teaching by discovery, depth). The host steps back in every few turns and whenever the room goes quiet. Turns that read their notes aloud, and host questions that give a finding away, are rewritten once (`isRecitation`, `isSpoiler` in `src/lib/floor.ts`).
+4. **Synthesis and parting thoughts**, as before. The outside judge also reports how far past the obvious the room got.
+
+**Host audition.** The host's model is `HOST_MODEL_ID`, a stand-in. To try another, open `/?host=<OpenRouter model id>` (it must have a zero-data-retention route). Each scored run records which model hosted, and "All your discussions" on the scorecard ranks the hosts once more than one has been tried.
+
+**News ticker.** `/api/ticker` reads a few public feeds (`FEEDS` in `src/lib/ticker.ts`) at most once an hour and has a low-cost model rewrite each story as a short question in its own words, with a summary. A click fills the question box and attaches the summary and link, because the models don't know today's news. It needs `OPENROUTER_TICKER_KEY` (and optionally `TICKER_MODEL`) as server-side secrets; without the key the ticker stays hidden. This is the one place the app calls a model from its own server. Confirm each feed's terms before launch; AP and Fix the News are left out until licensed.
+
 ## Local development
 
 Requirements: Node.js 22 and npm.

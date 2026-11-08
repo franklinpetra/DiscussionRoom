@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildHostThread,
+  buildHostTurnPrompt,
+  houseRules,
+  isRecitation,
+  isSpoiler,
+  NOTES_RULE,
+  overlapShare,
+  sharesRun,
+  takeTone,
   buildFloorThread,
   buildFloorTurnPrompt,
   buildInterjectionPrompt,
@@ -12,7 +21,7 @@ import {
   spokenText,
   type FloorContext,
 } from "@/lib/floor";
-import { PERSON, VOLUNTEER_MARKER, type GuestModel, type GuestTurn, type Hand } from "@/lib/guest-room";
+import { HOST, PERSON, VOLUNTEER_MARKER, type GuestModel, type GuestTurn, type Hand } from "@/lib/guest-room";
 import { buildPlaylist } from "@/lib/room-scene";
 
 const alice: GuestModel = { id: "vendor/alice", label: "Alice", vendor: "Vendor A" };
@@ -174,7 +183,7 @@ describe("the record", () => {
       contributions: [],
       errors: [],
     };
-    const items = buildPlaylist(run).slice(3);
+    const items = buildPlaylist(run);
     expect(items.map((item) => item.key)).toEqual(["c1", "c2", "c3", "p1"]);
     expect(items[0].cutAt).toBe(0);
     expect(items[1].kind).toBe("interjection");
@@ -253,9 +262,10 @@ describe("direct questions and spoken sources", () => {
     expect(askedSeat(turn(mini, "x", { asks: "Mini" }), [alice, mini])).toBeNull();
   });
 
-  it("tells the asked seat it was asked, and to answer first", () => {
+  it("tells the asked seat it was asked, to answer, and to carry it past its notes", () => {
     const prompt = lastContent(buildFloorTurnPrompt(context([turn(bob, "Alice, why?")]), alice, undefined, "Bob"));
-    expect(prompt).toContain("Bob just asked you a question. Answer it directly first");
+    expect(prompt).toContain("Bob just asked you a question.");
+    expect(prompt).toContain("carry it one step further than your notes did");
     expect(prompt).toContain("ASK:");
     expect(prompt).toMatch(/never a web address/);
   });
@@ -277,5 +287,98 @@ describe("sources", () => {
     expect(parsed.text).toBe("A 2023 Nature study found it, per.");
     expect(parsed.sources).toEqual(["https://www.nature.com/articles/x", "who.int"]);
     expect(parseTurnMarkers("No sources here.").sources).toBeUndefined();
+  });
+});
+
+describe("notes, not speeches", () => {
+  it("frames every blind answer as private notes the listener hasn't heard", () => {
+    const content = lastContent(buildFloorThread(context(), alice));
+    expect(content).toContain("your private notes");
+    expect(content).toContain(NOTES_RULE);
+    expect(content).toContain("hosted by Host");
+  });
+
+  it("no longer teases with setups", () => {
+    const prompt = lastContent(buildFloorTurnPrompt(context(), alice));
+    expect(prompt).not.toContain("strange part");
+    expect(prompt).toContain("never tease a point");
+  });
+
+  it("offers earlier lines for callbacks", () => {
+    const content = lastContent(buildFloorThread(context([turn(bob, "Bob speaks.", { keyPhrase: "Maps lie kindly" })]), alice));
+    expect(content).toContain("Lines the room has heard");
+    expect(content).toContain("Bob: Maps lie kindly");
+  });
+});
+
+describe("house rules and tone", () => {
+  it("gives every turn the house rules, with the chosen tone", () => {
+    const prompt = lastContent(buildFloorTurnPrompt({ ...context(), tone: "playful" }, alice));
+    expect(prompt).toContain("Yes, and");
+    expect(prompt).toContain("Callbacks");
+    expect(prompt).toContain("commit to it");
+    expect(houseRules("serious")).toContain("never humor at the subject's expense");
+    expect(houseRules()).not.toContain("Tone:");
+  });
+
+  it("reads the host's tone line and takes it off what is said", () => {
+    expect(takeTone("TONE: PLAYFUL\nBob, what did you see?")).toEqual({ tone: "playful", text: "Bob, what did you see?" });
+    expect(takeTone("**Tone: serious**\nCarol?").tone).toBe("serious");
+    expect(takeTone("TONE: WILD\nCarol?")).toEqual({ tone: undefined, text: "Carol?" });
+    expect(takeTone("No tone here.")).toEqual({ text: "No tone here." });
+  });
+});
+
+describe("the house host", () => {
+  const seats = [alice, bob, carol];
+
+  it("reads everyone's notes by name, and is told to ask, not tell", () => {
+    const thread = buildHostThread(context(), seats);
+    expect(thread[0].content).toContain("Your job is to ask, not tell");
+    expect(thread[0].content).toContain("Never state their finding");
+    expect(thread[1].content).toContain("Alice's blind view.");
+    expect(thread[1].content).toContain("Carol's blind view.");
+    expect(thread[1].content).toContain("At the table: Alice, Bob, Carol.");
+  });
+
+  it("opens by choosing a tone, and can take the story's suggestion", () => {
+    const prompt = lastContent(buildHostTurnPrompt(context(), seats, { suggestedTone: "serious" }));
+    expect(prompt).toContain("TONE: PLAYFUL, TONE: MIXED or TONE: SERIOUS");
+    expect(prompt).toContain("suggests SERIOUS");
+    expect(prompt).toContain("ASK:");
+  });
+
+  it("may pass once it has hosted, when every strong idea is out", () => {
+    const hosted = context([turn(HOST, "Alice, what did you see?", { kind: "host", asks: "Alice" })]);
+    const prompt = lastContent(buildHostTurnPrompt(hosted, seats));
+    expect(prompt).not.toContain("TONE:");
+    expect(prompt).toContain("reply with exactly PASS");
+    expect(lastContent(buildHostThread(hosted, seats))).toContain("You (hosting): Alice, what did you see?");
+  });
+
+  it("shows the host to the seats as hosting", () => {
+    const hosted = context([turn(HOST, "Alice, what did you see?", { kind: "host" })]);
+    expect(lastContent(buildFloorThread(hosted, alice))).toContain("Host (hosting): Alice, what did you see?");
+  });
+});
+
+describe("guards", () => {
+  const notes =
+    "Rent caps cut turnover, which quietly saves landlords more than the rent they lose, because every vacancy costs two months.";
+
+  it("spots a turn that reads its notes aloud, and lets a fresh one through", () => {
+    expect(isRecitation("Well, rent caps cut turnover, which quietly saves landlords more than the rent they lose.", notes)).toBe(true);
+    expect(isRecitation("Think about who pays for an empty flat: the owner does, every single month it sits there.", notes)).toBe(false);
+  });
+
+  it("spots a host question that gives the finding away, but allows naming the topic", () => {
+    expect(isSpoiler("Alice, you found that every vacancy costs two months, right?", notes)).toBe(true);
+    expect(isSpoiler("Alice, you saw something about turnover. What was it?", notes)).toBe(false);
+  });
+
+  it("measures overlap only when there is enough to judge", () => {
+    expect(overlapShare("Too short.", notes)).toBe(0);
+    expect(sharesRun("a b c d e f", "x a b c d e f y", 6)).toBe(true);
+    expect(sharesRun("a b c d e", "a b c d e", 6)).toBe(false);
   });
 });

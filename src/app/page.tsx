@@ -3,12 +3,12 @@ import SiteFooter from "@/app/site-footer";
 
 export const metadata = { title: "Discussion" };
 
-/** The front door is Discussion; Verity and Creative Clock are a click away in the header. A question can arrive as ?q=. */
+/** The front door is Discussion; Verity and Creative Clock are a click away in the header. A question can arrive as ?q=; a host audition candidate as ?host=. */
 export default async function Home({ searchParams }: PageProps<"/">) {
-  const { q } = await searchParams;
+  const { q, host } = await searchParams;
   return (
     <main className="shell page-shell">
-      <GuestRoom initialQuestion={typeof q === "string" ? q : ""} />
+      <GuestRoom initialQuestion={typeof q === "string" ? q : ""} hostCandidate={typeof host === "string" ? host : undefined} />
       <SiteFooter room="Discussion" />
     </main>
   );

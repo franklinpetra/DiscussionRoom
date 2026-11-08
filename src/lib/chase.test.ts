@@ -85,6 +85,7 @@ describe("clearer answers", () => {
     const system = buildIndependentPrompt("Q")[0].content;
     expect(system).toContain("Put your main point first");
     expect(system).toContain("give each its essentials in a sentence or two");
+    expect(system).toContain("name to yourself the answer most people would give");
   });
 });
 

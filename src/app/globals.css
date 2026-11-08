@@ -1597,6 +1597,50 @@ a {
   overflow-wrap: anywhere;
 }
 
+/* Thinking aloud: each seat's own hand, and the marks it chose. */
+.blind-card { --hand: Georgia, "Times New Roman", serif; }
+.blind-card[data-chair="a"] { --hand: Georgia, "Times New Roman", serif; }
+.blind-card[data-chair="b"] { --hand: "Gill Sans", "Trebuchet MS", Calibri, sans-serif; }
+.blind-card[data-chair="c"] { --hand: "American Typewriter", "Courier New", monospace; }
+.blind-card[data-chair="d"] { --hand: Palatino, "Palatino Linotype", "Book Antiqua", serif; }
+.blind-card[data-chair="e"] { --hand: "Avenir Next", Avenir, Verdana, sans-serif; }
+.blind-card[data-chair="f"] { --hand: Baskerville, "Baskerville Old Face", "Times New Roman", serif; }
+.blind-card[data-chair="g"] { --hand: Optima, Candara, "Segoe UI", sans-serif; }
+
+.blind-card-body .thinking-text {
+  font-family: var(--hand);
+}
+
+.thought-bold {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.thought-bold::selection,
+.thought-aside::selection {
+  background: color-mix(in srgb, var(--seat-color, #777) 25%, transparent);
+}
+
+.thought-aside {
+  color: var(--seat-color, var(--ink-soft));
+  font-style: italic;
+}
+
+.thought-hedge {
+  font-size: 0.82em;
+  opacity: 0.72;
+}
+
+.thought-struck {
+  opacity: 0.5;
+  text-decoration-thickness: 1.5px;
+}
+
+.thought-key {
+  display: block;
+  margin-top: 6px;
+}
+
 .stage-message {
   max-width: 460px;
   display: grid;
@@ -3183,4 +3227,113 @@ a {
 .room-footer a {
   color: var(--green-dark);
   font-weight: 600;
+}
+
+/* The news ticker, just above the question box. */
+.news-ticker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 13.5px;
+}
+
+.ticker-label {
+  flex: none;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.ticker-viewport {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+}
+
+.ticker-track {
+  display: flex;
+  gap: 8px;
+  width: max-content;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  animation: ticker-drift calc(var(--ticker-count, 10) * 6s) linear infinite;
+}
+
+.news-ticker[data-paused] .ticker-track,
+.ticker-viewport:hover .ticker-track,
+.ticker-viewport:focus-within .ticker-track {
+  animation-play-state: paused;
+}
+
+@keyframes ticker-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-50% - 4px)); }
+}
+
+.ticker-track button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ticker-track button:hover:not(:disabled),
+.ticker-track button:focus-visible {
+  border-color: var(--ink-soft);
+}
+
+.ticker-track button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.ticker-tag {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.ticker-tag[data-tag="Discovery"] { color: #3a5fb0; }
+.ticker-tag[data-tag="Good news"] { color: #1f7a64; }
+.ticker-tag[data-tag="Headline"] { color: #a4502c; }
+.ticker-tag[data-tag="World"] { color: #6a4fb3; }
+
+.ticker-pause {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .news-ticker { flex-wrap: wrap; }
+  .ticker-label { width: 100%; }
+}
+
+/* Less motion: a still row of four, no copies, no pause button. */
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track {
+    width: auto;
+    flex-wrap: wrap;
+    animation: none;
+  }
+  .ticker-track li:nth-child(n + 5) { display: none; }
+  .ticker-viewport { mask-image: none; }
+  .ticker-pause { display: none; }
 }

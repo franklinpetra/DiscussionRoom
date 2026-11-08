@@ -1,4 +1,5 @@
 import type { Scorecard } from "@/lib/scorecard";
+import { THINKING_MARKS } from "@/lib/thinking";
 
 export const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
 export const OPENROUTER_MODELS_API = "https://openrouter.ai/api/v1/models";
@@ -68,6 +69,36 @@ export const CHASE: GuestModel = {
   nickname: "Chase",
 };
 
+/**
+ * The house host: never seated, never in the blind round. It reads everyone's private notes
+ * and only asks, so the ideas come out in conversation instead of being presented. HOST is its
+ * identity in the room, so it never collides with a seated copy of the same model; the model
+ * that speaks for it is HOST_MODEL_ID, a stand-in until the host audition picks one. For an
+ * audition, ?host=<OpenRouter model id> swaps in another model (see hostRoute).
+ */
+export const HOST_MODEL_ID = "anthropic/claude-haiku-5.5";
+
+/** OpenRouter model ids: vendor/name, letters, digits, dots, dashes and colons. */
+const MODEL_ID = /^[a-z0-9][\w.-]*\/[\w.:-]+$/i;
+
+/** The model that speaks for the host: the house pick, or an audition candidate. */
+export function hostRoute(candidate?: string | null): GuestModel {
+  const id = candidate && MODEL_ID.test(candidate) && !candidate.endsWith(":free") ? candidate : HOST_MODEL_ID;
+  return { ...HOST, id };
+}
+
+export const HOST: GuestModel = {
+  id: "house/host",
+  label: "The host",
+  vendor: "The room's host",
+  color: "#3d4f63",
+  nickname: "Host",
+};
+
+/** How much play the subject allows. The host picks it after the blind round. */
+export const TONES = ["playful", "mixed", "serious"] as const;
+export type Tone = (typeof TONES)[number];
+
 export const FALLBACK_MODEL: GuestModel = {
   id: "z-ai/glm-5.3-flash",
   label: "GLM-5.3 Flash",
@@ -132,6 +163,8 @@ export type Attachment = {
 export type GuestTurn = {
   model: GuestModel;
   servedModel?: GuestModel;
+  /** Blind round only: the text with its thinking-aloud marks, for the cards (see thinking.ts). */
+  marked?: string;
   text: string;
   latency: number;
   usage: Usage | null;
@@ -139,8 +172,8 @@ export type GuestTurn = {
   keyPhrase?: string;
   /** Conversation turns only: a stable id, so a seat can speak more than once. */
   id?: string;
-  /** turn: took the floor · interjection: broke in · reply: answered an interjection · person: the asker joined in. */
-  kind?: "turn" | "interjection" | "reply" | "person" | "quip";
+  /** turn: took the floor · interjection: broke in · reply: answered an interjection · person: the asker joined in · host: the house host asked. */
+  kind?: "turn" | "interjection" | "reply" | "person" | "quip" | "host";
   /** Label of the speaker this turn answers. */
   respondingTo?: string;
   /** Someone broke in after this sentence (0-based); the rest went unsaid. */
@@ -167,6 +200,8 @@ export type LiveTurn = {
   status: "thinking" | "answering" | "complete" | "failed" | "stopped";
   text: string;
   error?: string;
+  /** The heart of the answer, bolded on the card when the model marked nothing itself. */
+  keyPhrase?: string;
 };
 
 export type GuestRound = {
@@ -179,6 +214,8 @@ export type GuestRun = {
   attachments: Attachment[];
   createdAt: string;
   rounds: GuestRound[];
+  /** The tone the host chose for the conversation. */
+  tone?: Tone;
   synthesis: GuestTurn | null;
   contributions: GuestTurn[];
   errors: string[];
@@ -236,8 +273,20 @@ export const KEY_PHRASE_INSTRUCTION =
   "as an official page or a doi.org link; if you aren't sure of an address, leave it out. That " +
   "line goes in the written record as notes and is never read aloud.";
 
+/**
+ * The depth bar. An obvious question is a reason to stretch harder, not to coast: the room
+ * earns its place only by finding what one quick answer would miss.
+ */
+export const DEPTH =
+  "Before you write, name to yourself the answer most people would give. Then go past it: ask " +
+  "what the question assumes and whether that holds; follow it ten years forward or a century " +
+  "back; look from the stakeholder nobody mentions; find the second-order consequence or the " +
+  "hidden cost; connect it to a field that seems unrelated. When the obvious answer is right, " +
+  "it can stand, in a clause, but it is never where you stop. If the question seems simple, " +
+  "stretch harder: the reader came for the revelation beneath it.";
+
 const INDEPENDENT_SYSTEM =
-  `${VOICE}\n\n${AUDIENCE}\n\n` +
+  `${VOICE}\n\n${AUDIENCE}\n\n${DEPTH}\n\n` +
   "Examine the question from several perspectives and stakeholders; look ten years forward or " +
   "a century back if that reveals something. Find the most consequential insight you can " +
   "defend and explain why it matters. Do not force a contrarian position when the conventional " +
@@ -245,6 +294,7 @@ const INDEPENDENT_SYSTEM =
   "its significance. Take more space only for an important uncertainty, a challenged assumption " +
   "or a genuine two-sided debate, and distill even that. If the question asks for several " +
   "items, give each its essentials in a sentence or two.\n\n" +
+  `${THINKING_MARKS}\n\n` +
   KEY_PHRASE_INSTRUCTION;
 
 export function modelLabel(turn: GuestTurn) {
@@ -442,8 +492,9 @@ export function buildSynthesisPrompt(
         KEY_PHRASE_INSTRUCTION +
         (allowAnotherRound
           ? "\n\nIf the conversation has genuinely not yet produced a conclusion worth stating, " +
+            "or it has only reached the answer most people would give, " +
             `reply with only ${ANOTHER_ROUND_MARKER} followed by one sentence naming what the ` +
-            "room still needs to resolve."
+            "room still needs to resolve or dig beneath."
           : ""),
     },
     {

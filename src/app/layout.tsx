@@ -6,7 +6,7 @@ const DESCRIPTION =
 
 export const metadata: Metadata = {
   // Link previews need absolute addresses; this is the site's live address.
-  metadataBase: new URL("https://theroom.click"),
+  metadataBase: new URL("https://thediscussion.app"),
   title: "Discussion · ideas worth discussing",
   description: DESCRIPTION,
   // The preview picture itself comes from opengraph-image.jpg beside each page.

@@ -79,7 +79,9 @@ export default function PrintReport({ run }: { run: GuestRun }) {
                         ? " (joins in)"
                         : turn.kind === "quip"
                           ? " (cuts to the chase)"
-                          : ""}
+                          : turn.kind === "host"
+                            ? " (hosts)"
+                            : ""}
                   </strong>
                   <p>
                     {turn.text}

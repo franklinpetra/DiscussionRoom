@@ -137,3 +137,48 @@ describe("what the room is told", () => {
     expect(content).toContain("listen well and build on one another");
   });
 });
+
+describe("depth and the host audition", () => {
+  it("reads how far past the obvious the room got, without changing the score", async () => {
+    const { parseScorecard } = await import("@/lib/scorecard");
+    const base = "BETTER: TIE | Even.\nSOUND: SOLID | Fine.";
+    const card = parseScorecard(`${base}\nDEPTH: DEEP | It found the hidden cost.`, [], true)!;
+    expect(card.depth).toBe("deep");
+    expect(card.depthWhy).toBe("It found the hidden cost.");
+    expect(card.score).toBe(parseScorecard(base, [], true)!.score);
+    expect(parseScorecard(base, [], true)!.depth).toBeUndefined();
+  });
+
+  it("ranks hosting models by average score", async () => {
+    const { hostAudition } = await import("@/lib/scorecard");
+    const ranked = hostAudition({
+      runs: [
+        { id: "1", score: 6, host: "a/one", depth: "some" },
+        { id: "2", score: 8, host: "b/two", depth: "deep" },
+        { id: "3", score: 9, host: "a/one", depth: "deep" },
+        { id: "4", tap: "learned" },
+      ],
+      sparks: {},
+    });
+    expect(ranked.map((item) => item.host)).toEqual(["b/two", "a/one"]);
+    expect(ranked[1]).toMatchObject({ runs: 2, averageScore: 7.5, deep: 1 });
+  });
+
+  it("never credits the host with a discovery", async () => {
+    const { creditableTurns } = await import("@/lib/scorecard");
+    const { HOST } = await import("@/lib/guest-room");
+    const host = { model: HOST, text: "Who saw it?", latency: 1, usage: null, kind: "host" as const, id: "h1" };
+    expect(creditableTurns([host])).toEqual([]);
+  });
+});
+
+describe("host route", () => {
+  it("uses the house pick unless an audition names a valid model", async () => {
+    const { hostRoute, HOST, HOST_MODEL_ID } = await import("@/lib/guest-room");
+    expect(hostRoute().id).toBe(HOST_MODEL_ID);
+    expect(hostRoute("google/gemini-3.8-flash").id).toBe("google/gemini-3.8-flash");
+    expect(hostRoute("not a model").id).toBe(HOST_MODEL_ID);
+    expect(hostRoute("x/y:free").id).toBe(HOST_MODEL_ID);
+    expect(hostRoute().nickname).toBe(HOST.nickname);
+  });
+});

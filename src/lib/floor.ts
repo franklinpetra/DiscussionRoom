@@ -9,8 +9,10 @@
  * model's own decision about what was actually said.
  */
 import {
+  HOST,
   KEY_PHRASE_INSTRUCTION,
   PERSON,
+  TONES,
   VOICE,
   VOLUNTEER_MARKER,
   buildIndependentPrompt,
@@ -20,6 +22,7 @@ import {
   type GuestModel,
   type GuestTurn,
   type Hand,
+  type Tone,
 } from "@/lib/guest-room";
 import { splitSentences } from "@/lib/room-scene";
 
@@ -29,6 +32,10 @@ export const MAX_FLOOR_TURNS = 10;
 export const EXTRA_FLOOR_TURNS = 4;
 /** Breaking in stays rare, so it means something. */
 export const MAX_BREAKS = 2;
+/** The host steps back in after this many seat turns in a row, or whenever the room goes quiet. */
+export const HOST_EVERY = 3;
+/** Host questions in one conversation, the opening included. */
+export const MAX_HOST_TURNS = 6;
 
 export type FloorContext = {
   question: string;
@@ -37,6 +44,8 @@ export type FloorContext = {
   blind: GuestTurn[];
   /** Everything said aloud since, in order. */
   conversation: GuestTurn[];
+  /** The tone the host chose; absent until it has. */
+  tone?: Tone;
 };
 
 function blindBlock(blind: GuestTurn[], self: GuestModel) {
@@ -51,7 +60,13 @@ function conversationBlock(conversation: GuestTurn[], self: GuestModel) {
     .map((turn) => {
       const who = turn.model.id === self.id ? "You" : speakerName(turn);
       const tag =
-        turn.kind === "interjection" ? " (breaking in)" : turn.kind === "person" ? " (joining in)" : "";
+        turn.kind === "interjection"
+          ? " (breaking in)"
+          : turn.kind === "person"
+            ? " (joining in)"
+            : turn.kind === "host"
+              ? " (hosting)"
+              : "";
       const brief = turn.kind === "quip" && turn.brief ? `\n(What the room most needs to settle: ${turn.brief})` : "";
       return `${who}${tag}: ${spokenText(turn)}${brief}`;
     })
@@ -87,12 +102,53 @@ const PODCAST_STYLE =
   "right\"), and no filler for its own sake. You are discovering this as you go: when " +
   "something genuinely surprises or delights you, let it show, the way people do when an " +
   "idea clicks. Excitement lives in how you build, not in adjectives: raise the stakes a " +
-  "notch, name the puzzle before the answer (\"here's the strange part\"), and now and then " +
-  "turn to the person who asked and bring them into it. Be easy with each other: lightness " +
+  "notch, and now and then turn to the person who asked and bring them into it. When you " +
+  "ask, ask a real, open question; never tease a point you're about to make. Be easy with each other: lightness " +
   "and humor are welcome, and a quick \"Ha,\" when something is genuinely funny. You may " +
   "slide in by finishing the last speaker's sentence in your own words; if you do, begin " +
   "your turn with \"…\". It should sound like people thinking out loud together, never like an " +
   "essay, a list or a speech.";
+
+/** Everyone's blind answers are notes, not a script: the listener has heard none of them. */
+export const NOTES_RULE =
+  "Everyone's first answers are private notes. The listener hasn't heard any of them. The " +
+  "conversation's job is to bring the best ideas out, one at a time, as if you're thinking of " +
+  "them now. Never read or summarize your notes. If someone else's note holds the better " +
+  "idea, ask them about it.";
+
+const TONE_RULES: Record<Tone, string> = {
+  playful:
+    "Tone: playful. Jokes and silliness are welcome; if someone starts a bit, commit to it. " +
+    "Stay truthful underneath the fun.",
+  mixed: "Tone: mixed. Humor is welcome when it shows something true.",
+  serious:
+    "Tone: serious. Warmth and care; a light touch at most, and never humor at the subject's expense.",
+};
+
+/**
+ * The house rules every seat plays by: improv's "yes, and", stand-up's callback, theater's
+ * arc, and teaching by discovery, plus the tone the host chose.
+ */
+export function houseRules(tone?: Tone) {
+  return (
+    "House rules. Yes, and: take what was just offered as given and build on it; building is " +
+    "not agreeing, and you can disagree while you build (\"yes, and that's exactly why it fails " +
+    "at scale\"). Callbacks: when a line the room has heard comes back in a new light, bring it " +
+    "back. An arc: the room is heading for a turn where someone sees the question differently, " +
+    "so move it forward. Teach by discovery: the listener should leave understanding something " +
+    "new, found on air rather than handed over. Depth: never settle for the answer most people " +
+    "would give; the room exists to find what lies beneath it." +
+    (tone ? `\n\n${TONE_RULES[tone]}` : "")
+  );
+}
+
+/** The heart of each turn so far, for callbacks. */
+function linesHeard(conversation: GuestTurn[]) {
+  const lines = conversation
+    .filter((turn) => turn.keyPhrase && turn.kind !== "person")
+    .map((turn) => `- ${speakerName(turn)}: ${turn.keyPhrase}`);
+  return lines.length ? `\n\nLines the room has heard (callbacks welcome):\n${lines.join("\n")}` : "";
+}
 
 /**
  * A seat's view of the room: its own blind answer, the unveiling, and everything said aloud.
@@ -106,13 +162,16 @@ export function buildFloorThread(context: FloorContext, model: GuestModel): Comp
   const others = context.blind.length - 1;
   const names = context.blind.filter((turn) => turn.model.id !== model.id).map((turn) => speakerName(turn));
   let content =
-    `You were not alone. ${others} other participant${others === 1 ? "" : "s"} answered the same ` +
-    "question independently, without knowing about you. Their answers:\n\n" +
+    "What you just wrote is your private notes. You were not alone: " +
+    `${others} other participant${others === 1 ? "" : "s"} answered the same question ` +
+    "independently, without knowing about you. Their private notes:\n\n" +
     blindBlock(context.blind, model) +
-    `\n\nAt this table you go by ${model.nickname ?? model.label}, and the others by ${names.join(", ")}. ` +
-    "Use those short names, as people at a table would.";
+    `\n\n${NOTES_RULE}\n\n` +
+    `At this table you go by ${model.nickname ?? model.label}, and the others by ${names.join(", ")}. ` +
+    `The conversation is hosted by ${HOST.nickname}. Use those short names, as people at a table would.`;
   if (context.conversation.length) {
     content += `\n\nThe conversation so far:\n\n${conversationBlock(context.conversation, model)}`;
+    content += linesHeard(context.conversation);
   }
   messages.push({ role: "user", content });
   return messages;
@@ -149,21 +208,24 @@ export function buildListenPrompt(
   return thread;
 }
 
-/** The turn a seat takes when it has the floor. */
+/** The turn a seat takes when it has the floor. `retry` explains why a first attempt was set aside. */
 export function buildFloorTurnPrompt(
   context: FloorContext,
   model: GuestModel,
   intent?: string,
   askedBy?: string,
+  retry?: string,
 ): CompletionMessage[] | null {
   const thread = buildFloorThread(context, model);
   if (!thread) return null;
   thread.push({
     role: "user",
     content:
-      `${VOICE}\n\n${CONVERSATION_SPIRIT}\n\n${PODCAST_STYLE}\n\n` +
+      `${VOICE}\n\n${CONVERSATION_SPIRIT}\n\n${PODCAST_STYLE}\n\n${houseRules(context.tone)}\n\n` +
+      (retry ? `${retry}\n\n` : "") +
       (askedBy
-        ? `${askedBy} just asked you a question. Answer it directly first, then add what hasn't been said if you can.\n\n`
+        ? `${askedBy} just asked you a question. Take it from the question as if it's occurring ` +
+          "to you now: answer it directly, then carry it one step further than your notes did.\n\n"
         : intent
           ? `You have the floor. You raised your hand to add: ${intent}\n\n`
           : "You have the floor.\n\n") +
@@ -206,7 +268,7 @@ export function buildInterjectionPrompt(
     content:
       `You broke in on ${speakerName(interrupted)}, who had just said: "${spokenText(interrupted)}" ` +
       `You cut in because: ${reason}\n\n` +
-      `${PODCAST_STYLE}\n\n` +
+      `${PODCAST_STYLE}\n\n${houseRules(context.tone)}\n\n` +
       "Say your interjection: one short sentence, spoken directly to them by name. No preamble.",
   });
   return thread;
@@ -228,7 +290,7 @@ export function buildReplyPrompt(
     content:
       `${speakerName(interjection)} broke in on you mid-thought.` +
       (unsaid ? ` You hadn't yet said: "${unsaid}"` : "") +
-      `\n\n${PODCAST_STYLE}\n\n` +
+      `\n\n${PODCAST_STYLE}\n\n${houseRules(context.tone)}\n\n` +
       "Answer them in one or two short sentences, by name: concede, push back, or finish " +
       "your point if it still matters. Never just agree.\n\n" +
       KEY_PHRASE_INSTRUCTION,
@@ -307,3 +369,134 @@ export function pickNextSpeaker(hands: Hand[], conversation: GuestTurn[], lastSp
     .map((hand, order) => ({ hand, order, when: lastSpoke(hand.model.id) }))
     .sort((a, b) => a.when - b.when || a.order - b.order)[0].hand;
 }
+
+// ---------------------------------------------------------------------------------------------
+// The house host
+
+const HOST_SYSTEM =
+  "You're hosting a live conversation among several AI models, for a listener who is earnest " +
+  "and wants to understand. Each model wrote private notes on the question first; you've read " +
+  "them all, but the listener hasn't heard any of them. Your job is to ask, not tell. Find an " +
+  "idea in someone's notes that hasn't come out yet, starting with the least obvious, and " +
+  "invite that person to bring it out. Ask in one of two ways: an open question (\"Gemini, what " +
+  "did you see here?\"), or naming the topic of their idea without its conclusion (\"Sage, you " +
+  "found a correlation around costs\"). Never state their finding, hint at it, or tease it, and " +
+  "never use setups like \"here's the strange part\". Never answer your own question. If every " +
+  "note is obvious, ask the room the question beneath the question. Now and then you may turn " +
+  "to the person who asked. Sound like a warm, curious podcast host: plain words, contractions, " +
+  "short spoken sentences. Then stop and let them talk.";
+
+/** The host's view: the question, everyone's notes by name, and the conversation so far. */
+export function buildHostThread(context: FloorContext, seats: GuestModel[]): CompletionMessage[] {
+  const names = seats.map((seat) => seat.nickname ?? seat.label);
+  const notes = context.blind.map((turn) => `--- ${speakerName(turn)} ---\n${turn.text}`).join("\n\n");
+  let content =
+    `Question:\n${context.question}` +
+    (context.attachments.length
+      ? `\n\n(The person also attached: ${context.attachments.map((item) => item.name).join(", ")}.)`
+      : "") +
+    `\n\nAt the table: ${names.join(", ")}.\n\nTheir private notes:\n\n${notes}`;
+  if (context.conversation.length) {
+    content += `\n\nThe conversation so far:\n\n${conversationBlock(context.conversation, HOST)}`;
+    content += linesHeard(context.conversation);
+  }
+  return [
+    { role: "system", content: `${HOST_SYSTEM}\n\n${houseRules(context.tone)}` },
+    { role: "user", content },
+  ];
+}
+
+/**
+ * The host's next question. The opening also chooses the tone (a suggestion, from a news story's
+ * tag, may come with the question). Later turns may PASS when every strong idea is out.
+ */
+export function buildHostTurnPrompt(
+  context: FloorContext,
+  seats: GuestModel[],
+  options: { suggestedTone?: Tone; retry?: string } = {},
+): CompletionMessage[] {
+  const thread = buildHostThread(context, seats);
+  const opening = !context.conversation.some((turn) => turn.kind === "host");
+  const format =
+    "Say one question, with at most one short sentence of bridge before it. Then add a separate " +
+    "line reading ASK: followed by the name of the one person you asked. If you asked the " +
+    "person who asked, leave the ASK line out.";
+  const content = opening
+    ? "The conversation is about to begin. First choose the tone the subject warrants: PLAYFUL " +
+      "for light or absurd subjects, MIXED for most, SERIOUS for grave ones (harm, loss, health, " +
+      "injustice). Write it on its own first line as TONE: PLAYFUL, TONE: MIXED or TONE: SERIOUS" +
+      (options.suggestedTone ? ` (the story's tag suggests ${options.suggestedTone.toUpperCase()}; change it if the subject warrants)` : "") +
+      ".\n\nThen open the conversation with your first question, to the person whose notes hold " +
+      `the least obvious idea.\n\n${format}`
+    : "It's your turn to steer. Which idea in the notes hasn't come out yet? Ask its owner. If " +
+      "every strong idea in the notes is already out and the room has reached its turn, reply " +
+      `with exactly PASS.\n\n${format}`;
+  thread.push({ role: "user", content: options.retry ? `${options.retry}\n\n${content}` : content });
+  return thread;
+}
+
+/** Takes the host's TONE line off its opening, returning the tone it chose and what it said. */
+export function takeTone(text: string): { tone?: Tone; text: string } {
+  let tone: Tone | undefined;
+  const kept = text.split("\n").filter((line) => {
+    const match = line.replace(/[*_`]/g, "").trim().match(/^TONE\s*:\s*(\w+)/i);
+    if (!match) return true;
+    const picked = match[1].toLowerCase() as Tone;
+    if ((TONES as readonly string[]).includes(picked)) tone = picked;
+    return false;
+  });
+  return { tone, text: kept.join("\n").trim() };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Guards: nobody reads their notes aloud, and the host never gives away a finding.
+
+function words(text: string) {
+  return normalize(text).split(" ").filter(Boolean);
+}
+
+function runs(list: string[], n: number) {
+  const found = new Set<string>();
+  for (let i = 0; i + n <= list.length; i++) found.add(list.slice(i, i + n).join(" "));
+  return found;
+}
+
+/** Whether two texts share any run of `n` words in a row. */
+export function sharesRun(a: string, b: string, n: number) {
+  const theirs = runs(words(b), n);
+  for (const run of runs(words(a), n)) if (theirs.has(run)) return true;
+  return false;
+}
+
+/** The share of `a`'s three-word runs that also appear in `b`; 0 when `a` is too short to judge. */
+export function overlapShare(a: string, b: string) {
+  const mine = runs(words(a), 3);
+  if (mine.size < 8) return 0;
+  const theirs = runs(words(b), 3);
+  let shared = 0;
+  for (const run of mine) if (theirs.has(run)) shared++;
+  return shared / mine.size;
+}
+
+/** Starting thresholds, to tune against real transcripts. */
+export const RECITATION_RUN = 6;
+export const RECITATION_SHARE = 0.4;
+export const SPOILER_RUN = 5;
+
+/** A turn that reads the speaker's own notes back instead of thinking aloud. */
+export function isRecitation(turnText: string, notes: string) {
+  return sharesRun(turnText, notes, RECITATION_RUN) || overlapShare(turnText, notes) > RECITATION_SHARE;
+}
+
+/** A host question that hands over the finding in the notes of the seat it asks. */
+export function isSpoiler(hostText: string, targetNotes: string) {
+  return sharesRun(hostText, targetNotes, SPOILER_RUN);
+}
+
+export const RECITATION_RETRY =
+  "Your last attempt read your notes aloud. Say it fresh, in new words, as a thought you're " +
+  "having now, and take it somewhere your notes didn't.";
+
+export const SPOILER_RETRY =
+  "Your last question gave away part of the answer it asked for. Ask again without the " +
+  "finding: an open question, or the topic alone.";

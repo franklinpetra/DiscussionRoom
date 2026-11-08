@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { CHASE, parseTurnMarkers, PERSON, type GuestModel, type Hand, type LiveTurn } from "@/lib/guest-room";
+import ThinkingText from "@/app/room/thinking-text";
+import { CHASE, HOST, parseTurnMarkers, PERSON, type GuestModel, type Hand, type LiveTurn } from "@/lib/guest-room";
 import {
   accentVoice,
   attentionPoint,
@@ -43,6 +44,8 @@ type RoomSceneProps = {
   seats: GuestModel[];
   items: PlayItem[];
   live: LiveTurn[];
+  /** The finished blind answers, shown on the cards during the pause (never read aloud). */
+  blind?: LiveTurn[];
   finished: boolean;
   phase: ScenePhase;
   question?: string;
@@ -66,6 +69,7 @@ export default function RoomScene({
   seats,
   items,
   live,
+  blind = [],
   finished,
   phase,
   question,
@@ -105,12 +109,16 @@ export default function RoomScene({
     }));
   }, [positions]);
   const seatIndex = useMemo(() => new Map(seats.map((seat, i) => [seat.id, i])), [seats]);
-  const seatVoices = useMemo(() => pickVoices(voices, seats.length), [voices, seats.length]);
+  // One more voice than seats: the last is the host's.
+  const seatVoices = useMemo(() => pickVoices(voices, seats.length + 1), [voices, seats.length]);
   const chaseVoice = useMemo(() => accentVoice(voices), [voices]);
-  /** The natural voice for a speaker: Chase's Australian, or the seat's own. */
+  /** The natural voice for a speaker: Chase's Australian, the host's own, or the seat's. */
   const naturalVoice = useCallback(
-    (seat: GuestModel) => (seat.id === CHASE.id ? CHASE_VOICE : seatVoice(seatIndex.get(seat.id) ?? 0)),
-    [seatIndex],
+    (seat: GuestModel) =>
+      seat.id === CHASE.id
+        ? CHASE_VOICE
+        : seatVoice(seat.id === HOST.id ? seats.length : (seatIndex.get(seat.id) ?? 0)),
+    [seatIndex, seats.length],
   );
   const current = items[index] ?? null;
   const currentKey = current?.key;
@@ -124,6 +132,7 @@ export default function RoomScene({
   const caption = sentences[sentence] ?? "";
   const speakerSeat = current ? seatIndex.get(current.seat.id) ?? -1 : -1;
   const isChase = current?.seat.id === CHASE.id;
+  const isHost = current?.seat.id === HOST.id;
   const currentVoice = current ? naturalVoice(current.seat) : "";
   const done = finished && index >= items.length;
   const active = playing && phase === "speaking" && !pausing;
@@ -272,10 +281,10 @@ export default function RoomScene({
         else advance();
       };
       const utterance = new SpeechSynthesisUtterance(caption);
-      const voice = (isChase ? chaseVoice : seatVoices[speakerSeat]) ?? null;
+      const voice = (isChase ? chaseVoice : seatVoices[isHost ? seats.length : speakerSeat]) ?? null;
       if (voice) utterance.voice = voice;
       utterance.rate = rate;
-      utterance.pitch = isChase ? 1 : (SEAT_PITCH[speakerSeat % SEAT_PITCH.length] ?? 1);
+      utterance.pitch = isChase || isHost ? 1 : (SEAT_PITCH[speakerSeat % SEAT_PITCH.length] ?? 1);
       utterance.onend = finish;
       utterance.onerror = () => {
         if (cancelled) return;
@@ -293,7 +302,7 @@ export default function RoomScene({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [active, currentKey, sentence, spokenCount, caption, effectiveMode, rate, seatVoices, chaseVoice, isChase, speakerSeat, voices.length, nextSpeaker]);
+  }, [active, currentKey, sentence, spokenCount, caption, effectiveMode, rate, seatVoices, chaseVoice, isChase, isHost, seats.length, speakerSeat, voices.length, nextSpeaker]);
 
   useEffect(() => () => synth()?.cancel(), []);
 
@@ -326,16 +335,11 @@ export default function RoomScene({
         ? "answering"
         : item.kind === "person"
           ? "joining in"
-          : item.stage;
+          : item.kind === "host"
+            ? "asking"
+            : item.stage;
   // The blind round, readable as it arrives: live text while writing, finished answers during the pause.
-  const blindCards: LiveTurn[] =
-    phase === "writing"
-      ? live
-      : phase === "interlude"
-        ? items
-            .filter((item) => item.stage === "Independent")
-            .map((item) => ({ model: item.seat, text: item.text, status: "complete" as const }))
-        : [];
+  const blindCards: LiveTurn[] = phase === "writing" ? live : phase === "interlude" ? blind : [];
 
   return (
     <section className="room-scene" data-phase={phase} aria-label="The room">
@@ -429,10 +433,12 @@ export default function RoomScene({
           {!!blindCards.length && (
             <div className="blind-cards" data-phase={phase}>
               {blindCards.map((card) => {
-                const text = parseTurnMarkers(card.text).text;
+                const parsed = parseTurnMarkers(card.text);
+                const text = parsed.text;
                 return (
                   <article
                     className="blind-card"
+                    data-chair={card.model.chair ?? seats.find((seat) => seat.id === card.model.id)?.chair}
                     data-state={card.status}
                     key={card.model.id}
                     style={{ ["--seat-color" as string]: card.model.color ?? "#777" }}
@@ -452,7 +458,15 @@ export default function RoomScene({
                       </span>
                     </header>
                     <div className="blind-card-body">
-                      <p>{text || (card.status === "thinking" ? "" : card.error ?? "")}</p>
+                      {text ? (
+                        <ThinkingText
+                          keyPhrase={card.keyPhrase ?? parsed.keyPhrase}
+                          reveal={phase === "writing"}
+                          text={text}
+                        />
+                      ) : (
+                        <p>{card.status === "thinking" ? "" : card.error ?? ""}</p>
+                      )}
                     </div>
                   </article>
                 );

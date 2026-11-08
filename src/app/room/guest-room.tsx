@@ -19,17 +19,25 @@ import {
 } from "@/lib/attachments";
 import {
   buildFloorTurnPrompt,
+  buildHostTurnPrompt,
   buildInterjectionPrompt,
   buildListenPrompt,
   buildPartingPrompt,
   buildReplyPrompt,
   askedSeat,
   EXTRA_FLOOR_TURNS,
+  HOST_EVERY,
+  isRecitation,
+  isSpoiler,
   MAX_BREAKS,
   MAX_FLOOR_TURNS,
+  MAX_HOST_TURNS,
   parseListen,
   pickNextSpeaker,
+  RECITATION_RETRY,
+  SPOILER_RETRY,
   spokenText,
+  takeTone,
   type FloorContext,
 } from "@/lib/floor";
 import {
@@ -41,6 +49,8 @@ import {
   CHASE,
   DEFAULT_MODELS,
   DEFAULT_SEATED,
+  HOST,
+  hostRoute,
   isPass,
   MAX_QUESTION_LENGTH,
   MIN_MODELS,
@@ -60,6 +70,7 @@ import {
   type GuestTurn,
   type Hand,
   type LiveTurn,
+  type Tone,
 } from "@/lib/guest-room";
 import {
   buildJudgePrompt,
@@ -77,6 +88,9 @@ import { buildMarkdown, sourceHref, sourceLabel } from "@/lib/report";
 import { buildSharpenPrompt, parseSharpened, type Sharpened } from "@/lib/sharpen";
 import { SPEECH_PRICE_PER_CHARACTER } from "@/lib/speech-audio";
 import { buildPlaylist, splitSentences } from "@/lib/room-scene";
+import { stripThinking } from "@/lib/thinking";
+import { storyAttachment, type TickerPrompt } from "@/lib/ticker";
+import NewsTicker from "@/app/room/news-ticker";
 
 const CONVERSATION = "The conversation";
 const MAX_PERSON_LENGTH = 600;
@@ -136,8 +150,18 @@ function colorOf(model: GuestModel) {
   return model.color ?? "var(--ink-soft)";
 }
 
-export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: string }) {
+export default function GuestRoom({
+  initialQuestion = "",
+  hostCandidate,
+}: {
+  initialQuestion?: string;
+  /** A host audition: the OpenRouter model that speaks for the host this visit. */
+  hostCandidate?: string;
+}) {
+  const hostModel = useMemo(() => hostRoute(hostCandidate), [hostCandidate]);
   const [question, setQuestion] = useState(initialQuestion.slice(0, MAX_QUESTION_LENGTH));
+  /** The tone a news story's tag suggests, when the question came from the ticker. */
+  const [storyTone, setStoryTone] = useState<Tone | undefined>();
   const [apiKey, setApiKey] = useState("");
   const [models, setModels] = useState(initialModels);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -175,6 +199,16 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
   const seated = useMemo(() => models.filter((model) => model.selected), [models]);
   const seatedNames = useMemo(() => assignNicknames(assignChairs(seated)), [seated]);
   const playlist = useMemo(() => (run ? buildPlaylist(run) : []), [run]);
+  const blindCards = useMemo<LiveTurn[]>(
+    () =>
+      (run?.rounds.find((round) => round.name === "Independent")?.turns ?? []).map((turn) => ({
+        model: turn.model,
+        text: turn.marked ?? turn.text,
+        keyPhrase: turn.keyPhrase,
+        status: "complete" as const,
+      })),
+    [run],
+  );
   const attachedChars = attachments.reduce((total, item) => total + item.text.length, 0);
 
   useEffect(() => {
@@ -234,9 +268,20 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
             (delta) => patch(model.id, (live) => ({ ...live, status: "answering", text: live.text + delta })),
             options,
           );
-          const { text, volunteered, keyPhrase, sources } = parseTurnMarkers(turn.text);
-          patch(model.id, (live) => ({ ...live, model: turn.servedModel ?? turn.model, status: "complete", text }));
-          return { ...turn, text, volunteered, keyPhrase, ...(sources ? { sources } : {}) } as GuestTurn;
+          const parsed = parseTurnMarkers(turn.text);
+          const { volunteered, keyPhrase, sources } = parsed;
+          // The blind round thinks aloud on screen; everyone else reads the plain text.
+          const blind = name === "Independent";
+          const text = blind ? stripThinking(parsed.text) : parsed.text;
+          patch(model.id, (live) => ({ ...live, model: turn.servedModel ?? turn.model, status: "complete", text: parsed.text, keyPhrase }));
+          return {
+            ...turn,
+            text,
+            ...(blind && parsed.text !== text ? { marked: parsed.text } : {}),
+            volunteered,
+            keyPhrase,
+            ...(sources ? { sources } : {}),
+          } as GuestTurn;
         } catch (stageError) {
           const message = getErrorMessage(stageError);
           patch(model.id, (live) => ({
@@ -307,6 +352,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
     }
 
     const seats = assignNicknames(assignChairs(seated));
+    const suggestedTone = storyTone;
     setRunSeats(seats);
     setSharpened(null);
     setTap(null);
@@ -430,21 +476,61 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
         currentRun.rounds.push(round);
       }
       const conversation = round.turns;
-      const context = (): FloorContext => ({ question: cleanQuestion, attachments, blind, conversation });
+      const context = (): FloorContext => ({ question: cleanQuestion, attachments, blind, conversation, tone: currentRun.tone });
       const record = (turn: GuestTurn) => {
         conversation.push(turn);
         publish();
       };
       const others = (id?: string) => seats.filter((model) => model.id !== id);
       let breaks = conversation.filter((turn) => turn.kind === "interjection").length;
+      const notesOf = (id: string) => blind.find((turn) => turn.model.id === id)?.text ?? "";
+      let hostTurns = conversation.filter((turn) => turn.kind === "host").length;
+      let sinceHost = 0;
+
+      /**
+       * The host asks one open question. Returns the seat it asked, "person" when it turned to
+       * the person who asked, or null when it passed, was out of questions or couldn't be reached.
+       * A question that gives away the asked seat's finding gets one rewrite, then is dropped.
+       */
+      const hostAsks = async (): Promise<GuestModel | "person" | null> => {
+        if (hostTurns >= MAX_HOST_TURNS) return null;
+        hostTurns++;
+        setStatus("The host is asking…");
+        let retry: string | undefined;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const said = await speak(hostModel, buildHostTurnPrompt(context(), seats, { suggestedTone, retry }), "host", PARTING_OPTIONS);
+          if (!said || isPass(said.text)) return null;
+          const { tone, text } = takeTone(said.text);
+          if (tone && !currentRun.tone) currentRun.tone = tone;
+          if (!text) return null;
+          // Spoken by the host's model, but it belongs to the host in the room.
+          const turn: GuestTurn = { ...said, model: HOST, text };
+          const asked = askedSeat(turn, seats);
+          if (asked && isSpoiler(text, notesOf(asked.id))) {
+            retry = SPOILER_RETRY;
+            continue;
+          }
+          record(turn);
+          sinceHost = 0;
+          return asked ?? "person";
+        }
+        return null;
+      };
 
       setConversing(true);
-      setStatus("The room is deciding who speaks first…");
-      let hands = await listen(context(), others(conversation.at(-1)?.model.id), false);
+      setStatus("The host is opening…");
+      let hands: Hand[] = [];
       let taken = 0;
       let misses = 0;
       // A seat someone just put a direct question to answers next.
       let addressed: { model: GuestModel; by: string } | null = null;
+      const opened = hostTurns ? null : await hostAsks();
+      if (stopped()) return;
+      if (opened && opened !== "person") addressed = { model: opened, by: HOST.nickname! };
+      else {
+        setStatus("The room is deciding who speaks first…");
+        hands = await listen(context(), others(conversation.at(-1)?.model.id), false);
+      }
       while (taken < maxTurns && misses < 3 && !activeController.signal.aborted) {
         const personText = pendingPersonRef.current;
         if (personText) {
@@ -466,21 +552,51 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
           continue;
         }
 
+        // The host steers: after a few seat turns in a row, and whenever the room goes quiet.
+        if (!addressed && sinceHost >= HOST_EVERY) {
+          const asked = await hostAsks();
+          if (stopped()) return;
+          if (asked === "person") hands = await listen(context(), seats, false);
+          else if (asked) {
+            addressed = { model: asked, by: HOST.nickname! };
+            hands = [];
+          }
+        }
+
         const last = conversation.at(-1);
         const askedBy = addressed?.by;
-        const chosen = addressed
+        let chosen = addressed
           ? { model: addressed.model, kind: "hand" as const, reason: "" }
-          : (pickNextSpeaker(hands, conversation, last?.model.id) ??
-            (conversation.length ? null : { model: seats[rotation % seats.length], kind: "hand" as const, reason: "" }));
+          : pickNextSpeaker(hands, conversation, last?.model.id);
         addressed = null;
-        if (!chosen) break;
+        if (!chosen) {
+          // Silence becomes the host's next question, until every strong idea is out.
+          const asked = await hostAsks();
+          if (stopped()) return;
+          if (asked === "person") {
+            hands = await listen(context(), seats, false);
+            continue;
+          }
+          if (asked) {
+            addressed = { model: asked, by: HOST.nickname! };
+            hands = [];
+            continue;
+          }
+          if (!conversation.some((turn) => turn.kind === "turn")) {
+            chosen = { model: seats[rotation % seats.length], kind: "hand" as const, reason: "" };
+          } else break;
+        }
         setStatus(`${chosen.model.nickname ?? chosen.model.label} has the floor…`);
-        const turn = await speak(
-          chosen.model,
-          buildFloorTurnPrompt(context(), chosen.model, chosen.reason || undefined, askedBy),
-          "turn",
-        );
+        const ask = (retry?: string) =>
+          speak(chosen.model, buildFloorTurnPrompt(context(), chosen.model, chosen.reason || undefined, askedBy, retry), "turn");
+        let turn = await ask();
         if (stopped()) return;
+        // Nobody reads their notes aloud: one fresh attempt, then the seat passes.
+        if (turn && !isPass(turn.text) && isRecitation(turn.text, notesOf(chosen.model.id))) {
+          turn = await ask(RECITATION_RETRY);
+          if (stopped()) return;
+          if (turn && isRecitation(turn.text, notesOf(chosen.model.id))) turn = null;
+        }
         hands = hands.filter((hand) => hand.model.id !== chosen.model.id);
         if (!turn || isPass(turn.text) || /^(i('|’)ll\s+)?pass\b/i.test(turn.text.trim())) {
           misses++;
@@ -488,6 +604,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
         }
         misses = 0;
         taken++;
+        sinceHost++;
         record({ ...turn, respondingTo: last ? (last.model.id === PERSON.id ? "you" : modelLabel(last)) : undefined });
         const spoken = conversation.at(-1)!;
         const asked = askedSeat(spoken, seats);
@@ -671,7 +788,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
             if (card) {
               currentRun.scorecard = card;
               currentRun.judging = "done";
-              setHistory(recordScorecard(readScoreHistory(), currentRun.createdAt, seats, card));
+              setHistory(recordScorecard(readScoreHistory(), currentRun.createdAt, seats, card, hostModel.id));
             } else {
               // Without a judge the discussion still stands; the scorecard says it couldn't be scored.
               currentRun.judging = "failed";
@@ -831,13 +948,31 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
               </form>
   ) : null;
 
+  /** A news prompt fills the box (it doesn't start the room) and brings its story along. */
+  function pickStory(prompt: TickerPrompt) {
+    const story = storyAttachment(prompt);
+    const others = attachments.filter((item) => !item.name.startsWith("Story · "));
+    try {
+      setAttachments(addAttachment(others, story.name, story.text));
+      setQuestion(prompt.question);
+      setStoryTone(prompt.tone);
+      setError("");
+    } catch (storyError) {
+      setError(getErrorMessage(storyError));
+    }
+  }
+
   const composer = (
     <div className="guest-composer">
+      <NewsTicker disabled={running} onPick={pickStory} />
       <div className="composer-box">
         <textarea
           aria-label="Your question"
           maxLength={MAX_QUESTION_LENGTH}
-          onChange={(event) => setQuestion(event.target.value)}
+          onChange={(event) => {
+            setQuestion(event.target.value);
+            if (!event.target.value.trim()) setStoryTone(undefined);
+          }}
           placeholder="A question, a decision, a draft, a problem worth more than one opinion…"
           rows={4}
           value={question}
@@ -971,6 +1106,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
           items={playlist}
           key={run?.createdAt ?? "idle"}
           live={liveStage?.turns ?? (liveSynthesis ? [liveSynthesis] : [])}
+          blind={blindCards}
           phase={phase}
           question={run?.question}
           seats={run ? runSeats : seatedNames}
@@ -1028,6 +1164,7 @@ export default function GuestRoom({ initialQuestion = "" }: { initialQuestion?: 
                         {turn.kind === "reply" && <small> answers {turn.respondingTo}</small>}
                         {turn.kind === "person" && <small> joins in</small>}
                         {turn.kind === "quip" && <small> cuts to the chase</small>}
+                        {turn.kind === "host" && <small> asks</small>}
                       </strong>
                       {turn.id && discoveryAt.get(turn.id) && <DiscoveryChip point={discoveryAt.get(turn.id)!} />}
                       {turn.kind !== "person" && <span>{turn.latency}s</span>}

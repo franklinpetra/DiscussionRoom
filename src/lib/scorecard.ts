@@ -87,13 +87,17 @@ export function anonymizer(seats: GuestModel[]) {
       ? speakerName(turn)
       : turn.kind === "quip"
         ? "The room's one-line summary"
-        : (voices.get(turn.model.id) ?? "Another voice");
+        : turn.kind === "host"
+          ? "The host"
+          : (voices.get(turn.model.id) ?? "Another voice");
   return { hide, who };
 }
 
 /** The turns the judge can credit: everything the models said aloud. */
 export function creditableTurns(conversation: GuestTurn[]) {
-  return conversation.filter((turn) => turn.model.id !== PERSON.id && turn.kind !== "quip" && turn.id);
+  return conversation.filter(
+    (turn) => turn.model.id !== PERSON.id && turn.kind !== "quip" && turn.kind !== "host" && turn.id,
+  );
 }
 
 export type JudgeInput = {
@@ -139,13 +143,17 @@ export function buildJudgePrompt(input: JudgeInput): CompletionMessage[] {
         "3. Does Answer 1 or 2, whichever came from the discussion, hold up? You cannot browse, " +
         "so judge from what you know: are its claims accurate and supported, and is its reasoning " +
         "sound? Name up to three specific claims worth checking.\n\n" +
+        "4. Did the room get beyond the obvious? DEEP: it reached an insight a thoughtful person " +
+        "would not have offered in a quick answer. SOME: it went somewhat past the obvious. " +
+        "OBVIOUS: it ended where a quick answer would.\n\n" +
         "Reply in exactly this format and nothing else:\n" +
         "BETTER: 1, 2 or TIE | why, in twenty words or fewer\n" +
         "DISCOVERY: T# | the point, in fifteen words or fewer\n" +
         "(one DISCOVERY line per point, or the single line DISCOVERY: NONE)\n" +
         "SOUND: SOLID, MOSTLY or SHAKY | why, in twenty words or fewer\n" +
         "CHECK: a claim worth checking, in fifteen words or fewer\n" +
-        "(zero to three CHECK lines)",
+        "(zero to three CHECK lines)\n" +
+        "DEPTH: DEEP, SOME or OBVIOUS | why, in twenty words or fewer",
     },
     {
       role: "user",
@@ -168,6 +176,9 @@ export type Scorecard = {
   sound: "solid" | "mostly" | "shaky";
   soundWhy: string;
   checks: string[];
+  /** Beyond the obvious? Tracked beside the score, not inside it, so old scores stay comparable. */
+  depth?: "deep" | "some" | "obvious";
+  depthWhy?: string;
   /** Out of 10: beat one model alone (4), discoveries (3), holds up (3). */
   score: number;
 };
@@ -195,9 +206,11 @@ export function parseScorecard(
   let soundWhy = "";
   const discoveries: Discovery[] = [];
   const checks: string[] = [];
+  let depth: Scorecard["depth"];
+  let depthWhy = "";
   for (const raw of reply.split("\n")) {
     const line = raw.replace(/[*`]/g, "").trim();
-    const match = line.match(/^(BETTER|DISCOVERY|SOUND|CHECK)\s*:\s*(.*)$/i);
+    const match = line.match(/^(BETTER|DISCOVERY|SOUND|CHECK|DEPTH)\s*:\s*(.*)$/i);
     if (!match) continue;
     const [first, ...rest] = match[2].split("|");
     const head = first.trim();
@@ -230,6 +243,14 @@ export function parseScorecard(
       case "CHECK":
         if (head && checks.length < 3) checks.push([head, tail].filter(Boolean).join(" | "));
         break;
+      case "DEPTH": {
+        const level = head.toLowerCase();
+        if (level.startsWith("deep")) depth = "deep";
+        else if (level.startsWith("some")) depth = "some";
+        else if (level.startsWith("obvious")) depth = "obvious";
+        depthWhy = tail;
+        break;
+      }
     }
   }
   if (!better || !sound) return null;
@@ -241,6 +262,7 @@ export function parseScorecard(
     sound,
     soundWhy,
     checks,
+    ...(depth ? { depth, depthWhy } : {}),
     score: parts.better + parts.discoveries + parts.sound,
   };
 }
@@ -259,6 +281,9 @@ export type HistoryEntry = {
   score?: number;
   better?: Scorecard["better"];
   discoveries?: number;
+  depth?: Scorecard["depth"];
+  /** The model that hosted, for the host audition. */
+  host?: string;
   tap?: TapId;
 };
 export type ScoreHistory = {
@@ -289,7 +314,13 @@ function save(history: ScoreHistory) {
 }
 
 /** Adds one discussion's scorecard to the running record, once per discussion, keeping any tap already given. */
-export function recordScorecard(history: ScoreHistory, runId: string, seats: GuestModel[], card: Scorecard) {
+export function recordScorecard(
+  history: ScoreHistory,
+  runId: string,
+  seats: GuestModel[],
+  card: Scorecard,
+  host?: string,
+) {
   const existing = history.runs.find((run) => run.id === runId);
   if (existing?.score != null) return history;
   const sparks = { ...history.sparks };
@@ -304,6 +335,8 @@ export function recordScorecard(history: ScoreHistory, runId: string, seats: Gue
     score: card.score,
     better: card.better,
     discoveries: card.discoveries.length,
+    ...(card.depth ? { depth: card.depth } : {}),
+    ...(host ? { host } : {}),
   };
   const runs = existing ? history.runs.map((run) => (run.id === runId ? entry : run)) : [...history.runs, entry];
   return save({ runs: runs.slice(-200), sparks });
@@ -330,6 +363,25 @@ export function summarize(history: ScoreHistory) {
     roomWins: scored.filter((run) => run.better === "room").length,
     ties: scored.filter((run) => run.better === "tie").length,
     discoveries: scored.reduce((sum, run) => sum + (run.discoveries ?? 0), 0),
+    deep: scored.filter((run) => run.depth === "deep").length,
+    hosts: hostAudition(history),
     taps,
   };
+}
+
+/** The host audition: each hosting model's average score and how often its room went deep, best first. */
+export function hostAudition(history: ScoreHistory) {
+  const byHost = new Map<string, HistoryEntry[]>();
+  for (const run of history.runs) {
+    if (run.score == null || !run.host) continue;
+    byHost.set(run.host, [...(byHost.get(run.host) ?? []), run]);
+  }
+  return [...byHost.entries()]
+    .map(([host, runs]) => ({
+      host,
+      runs: runs.length,
+      averageScore: runs.reduce((sum, run) => sum + (run.score ?? 0), 0) / runs.length,
+      deep: runs.filter((run) => run.depth === "deep").length,
+    }))
+    .sort((a, b) => b.averageScore - a.averageScore);
 }

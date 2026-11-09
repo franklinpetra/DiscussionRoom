@@ -10,7 +10,7 @@ import {
   type FeedItem,
 } from "@/lib/ticker";
 
-const science: Feed = { source: "ScienceDaily", url: "https://example.org/rss", tag: "Discovery" };
+const science: Feed = { source: "ScienceDaily", url: "https://example.org/rss", tag: "Science" };
 
 const rss = `<?xml version="1.0"?><rss><channel><title>Feed</title>
 <item><title><![CDATA[Bees can count to four]]></title><link>https://example.org/bees</link>
@@ -28,7 +28,7 @@ describe("feeds", () => {
     const items = parseFeed(rss, science);
     expect(items.map((item) => item.title)).toEqual(["Bees can count to four", "Ocean heat record"]);
     expect(items[0].summary).toBe("Honeybees & numbers: a study finds bees track up to four objects.");
-    expect(items[0]).toMatchObject({ source: "ScienceDaily", tag: "Discovery", link: "https://example.org/bees" });
+    expect(items[0]).toMatchObject({ source: "ScienceDaily", tag: "Science", link: "https://example.org/bees" });
   });
 
   it("reads Atom entries too", () => {
@@ -51,20 +51,23 @@ describe("rewriting stories as questions", () => {
   it("asks for questions in the room's own words, never the headline's", () => {
     const [system, user] = buildTickerPrompt(items);
     expect(system.content).toContain("never the headline's wording");
-    expect(user.content).toContain("[1] (Discovery, ScienceDaily)");
+    expect(user.content).toContain("[1] (ScienceDaily, usually Science)");
+    expect(system.content).toContain("Science, Technology, Health, Climate, Politics, International, Business, Culture");
+    expect(system.content).not.toContain("Good news");
   });
 
   it("keeps well-formed lines, tied to their story, and drops copies of the headline", () => {
     const reply = [
       "[1] | PLAYFUL | Why would a bee need to count? | A study finds honeybees can track up to four objects.",
-      "[2] | SERIOUS | Ocean heat record | Oceans reached a new high.",
-      "[2] | WILD | What does warmer water change? | Oceans reached a new high.",
+      "[1] | Science | PLAYFUL | Why would a bee need to count? | A study finds honeybees can track up to four objects.",
+      "[2] | Climate | SERIOUS | Ocean heat record | Oceans reached a new high.",
+      "[2] | Climate | WILD | What does warmer water change? | Oceans reached a new high.",
       "not a line",
     ].join("\n");
     const prompts = parseTickerReply(reply, items);
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toMatchObject({
-      tag: "Discovery",
+      tag: "Science",
       tone: "playful",
       question: "Why would a bee need to count?",
       link: "https://example.org/bees",
@@ -72,7 +75,8 @@ describe("rewriting stories as questions", () => {
   });
 
   it("attaches the story's summary and link for the room to read", () => {
-    const [prompt] = parseTickerReply("[1] | MIXED | Why would a bee need to count? | Bees track four objects.", items);
+    const [prompt] = parseTickerReply("[1] | Gossip | MIXED | Why would a bee need to count? | Bees track four objects.", items);
+    expect(prompt.tag).toBe("Science");
     const story = storyAttachment(prompt);
     expect(story.name).toBe("Story · ScienceDaily");
     expect(story.text).toContain("Bees track four objects.");

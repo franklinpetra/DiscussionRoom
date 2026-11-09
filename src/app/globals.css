@@ -3304,10 +3304,14 @@ a {
   color: var(--ink-soft);
 }
 
-.ticker-tag[data-tag="Discovery"] { color: #3a5fb0; }
-.ticker-tag[data-tag="Good news"] { color: #1f7a64; }
-.ticker-tag[data-tag="Headline"] { color: #a4502c; }
-.ticker-tag[data-tag="World"] { color: #6a4fb3; }
+.ticker-tag[data-tag="Science"] { color: #3a5fb0; }
+.ticker-tag[data-tag="Technology"] { color: #2d6f86; }
+.ticker-tag[data-tag="Health"] { color: #1f7a64; }
+.ticker-tag[data-tag="Climate"] { color: #4f7a2a; }
+.ticker-tag[data-tag="Politics"] { color: #a4502c; }
+.ticker-tag[data-tag="International"] { color: #6a4fb3; }
+.ticker-tag[data-tag="Business"] { color: #8a6a1f; }
+.ticker-tag[data-tag="Culture"] { color: #a33d6b; }
 
 .ticker-pause {
   flex: none;
